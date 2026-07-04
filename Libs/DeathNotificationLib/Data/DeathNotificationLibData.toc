@@ -5,6 +5,6 @@
 ## Author: Deathwing
 ## X-License: GNU GPL3
 ## X-Category: Library
-## Version: 1783036800
+## Version: 1783123200
 
 DeathNotificationLibData.xml
