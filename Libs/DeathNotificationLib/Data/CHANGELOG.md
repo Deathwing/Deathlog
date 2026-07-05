@@ -1,9 +1,9 @@
 # Changelog
 
-## 1783123200
+## 1783209600
 
 ### vanilla
-- 1,458,343 entries as of July 4, 2026
+- 1,461,660 entries as of July 5, 2026
 
 ### tbc
-- 1,461,590 entries as of July 4, 2026
+- 1,464,921 entries as of July 5, 2026
