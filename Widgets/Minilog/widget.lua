@@ -536,6 +536,7 @@ local function setupRowEntries()
 
 		local function checkSpoof()
 			if canCheckSpoof() then
+				C_FriendList.SetWhoToUi(false) -- force chat output
 				C_FriendList.SendWho(death_tomb_frame.clicked_name)
 			end
 		end

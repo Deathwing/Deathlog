@@ -586,6 +586,13 @@ deathlog_event_handler:RegisterEvent("PLAYER_ENTERING_WORLD")
 
 deathlog_event_handler:SetScript("OnEvent", handleEvent)
 
+-- reset leaked SetWhoToUi on chat shift-click
+hooksecurefunc("SetItemRef", function(link)
+	if IsShiftKeyDown() and type(link) == "string" and string.sub(link, 1, 6) == "player" then
+		C_FriendList.SetWhoToUi(false)
+	end
+end)
+
 local LSM30 = LibStub("LibSharedMedia-3.0", true)
 local options = {
 	name = addonName,
