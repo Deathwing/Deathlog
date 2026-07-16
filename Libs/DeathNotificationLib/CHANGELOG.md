@@ -1,5 +1,10 @@
 # Changelog
 
+## V21 — 2026-07-15
+
+### Improvements
+- Updated the TOC for WoW Classic 2.5.6 (TBC Anniversary).
+
 ## V20 — 2026-06-27
 
 ### New Features

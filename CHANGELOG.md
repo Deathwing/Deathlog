@@ -2,6 +2,18 @@
 
 All notable changes to Deathlog will be documented in this file.
 
+## [0.5.16] - 2026-07-16
+
+### Bug Fixes
+- Fixed Watch List clicks landing on the wrong column when the Deathlog window is scaled down — the Icon and Remove (X) buttons were unclickable and clicking them opened the Note editor instead. (Thanks to Fate for reporting)
+- Fixed a death being broadcast a second time when logging back into an already-dead hardcore character, which created duplicate death entries.
+- Fixed a "bad argument #3 to 'SetFont'" error when opening the Watch List tab, caused by invalid font flags that newer clients no longer accept.
+- Fixed an "outside of expected range" error on TBC Anniversary (2.5.6) when opening the settings via the minimap button, `/deathlog options`, or the mini log menu. The client no longer accepts a category name string in `Settings.OpenToCategory`; the embedded AceConfigDialog-3.0 was updated to upstream r1390 (minor 92) and the numeric category ID returned by `AddToBlizOptions` is now used (with an AceConfigDialog window fallback).
+- Fixed "Invalid font asset" errors on TBC Anniversary from the font dropdown widget (SharedMediaWidgets), which called `SetFont` with an empty font path when a widget was released or a font failed to resolve.
+
+### Improvements
+- Updated the TOC for WoW Classic 2.5.6 (TBC Anniversary).
+
 ## [0.5.15] - 2026-06-27
 
 ### New Features

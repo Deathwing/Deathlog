@@ -782,7 +782,11 @@ local function DeathFrameDropdown(frame, level, menuList)
 	end
 
 	local function openSettings()
-		Settings.OpenToCategory("Deathlog")
+		if Deathlog_OpenSettings then
+			Deathlog_OpenSettings()
+		else
+			Settings.OpenToCategory("Deathlog")
+		end
 	end
 
 	if level == 1 then

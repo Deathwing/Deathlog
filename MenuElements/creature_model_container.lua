@@ -40,7 +40,10 @@ creature_model_container.modelFrame:Hide()
 
 creature_model_container.quote = creature_model_container:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 creature_model_container.quote:SetText("")
-creature_model_container.quote:SetFont(Deathlog_L.creature_model_quote_font, 14, "THICK")
+-- "" not "THICK": older clients silently ignored unknown flags, newer ones
+-- error ("supported flags: OUTLINE, THICKOUTLINE, ..."), so keep the same
+-- (no-flag) appearance the ignored value always produced.
+creature_model_container.quote:SetFont(Deathlog_L.creature_model_quote_font, 14, "")
 creature_model_container.quote:SetJustifyV("TOP")
 creature_model_container.quote:SetJustifyH("CENTER")
 creature_model_container.quote:SetTextColor(0.7, 0.7, 0.7)

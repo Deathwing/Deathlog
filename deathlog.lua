@@ -94,7 +94,7 @@ local deathlog_minimap_button = LibStub("LibDataBroker-1.1"):NewDataObject(addon
 				DeathlogToggleMenu(deathlog_data, DeathlogDataCopy.PRECOMPUTED_GENERAL_STATS, DeathlogDataCopy.PRECOMPUTED_LOG_NORMAL_PARAMS)
 			end
 		else
-			Settings.OpenToCategory(addonName)
+			Deathlog_OpenSettings()
 		end
 	end,
 	OnTooltipShow = function(tooltip)
@@ -561,7 +561,7 @@ local function SlashHandler(msg, editbox)
 	arg = arg or ""
 
 	if command == "option" or command == "options" then
-		Settings.OpenToCategory(addonName)
+		Deathlog_OpenSettings()
 	elseif command == "alert" then
 		DeathNotificationLib.TestDeathAlert()
 	elseif command == "sync" then
@@ -801,7 +801,19 @@ local options = {
 }
 
 LibStub("AceConfig-3.0"):RegisterOptionsTable(addonName, options)
-LibStub("AceConfigDialog-3.0"):AddToBlizOptions(addonName, "Deathlog", nil)
+local _, deathlog_settings_category_id = LibStub("AceConfigDialog-3.0"):AddToBlizOptions(addonName, "Deathlog", nil)
+
+-- Newer clients (TBC Anniversary 2.5.6+) require the numeric category ID returned
+-- by AddToBlizOptions; passing the addon name string errors in OpenSettingsPanel.
+function Deathlog_OpenSettings()
+	if Settings and Settings.OpenToCategory and deathlog_settings_category_id then
+		local ok = pcall(Settings.OpenToCategory, deathlog_settings_category_id)
+		if ok then
+			return
+		end
+	end
+	LibStub("AceConfigDialog-3.0"):Open(addonName)
+end
 
 sync_options = {
 	name = "Database Sync",

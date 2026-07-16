@@ -91,9 +91,16 @@ do
 
 	local function SetText(self, text) -- Set the text displayed in the box.
 		self.frame.text:SetText(text or "")
+		if not text or text == "" or not self.list then
+			return
+		end
 		local font = self.list[text] ~= text and self.list[text] or Media:Fetch('font',text)
-		local _, size, outline= self.frame.text:GetFont()
-		self.frame.text:SetFont(font,size,outline)
+		-- Newer clients (TBC Anniversary 2.5.6+) hard-error on SetFont with an
+		-- empty/nil font path instead of silently ignoring it.
+		if type(font) == "string" and font ~= "" then
+			local _, size, outline = self.frame.text:GetFont()
+			self.frame.text:SetFont(font, size, outline)
+		end
 	end
 
 	local function SetLabel(self, text) -- Set the text for the label.

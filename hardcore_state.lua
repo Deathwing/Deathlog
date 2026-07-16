@@ -276,13 +276,15 @@ end
 ---@param unit UnitToken|nil  defaults to "player"
 ---@return integer  One of HC_STATE values
 function Deathlog_getHardcoreCharacterState(unit)
-	unit = unit or "player"
+	local unitState = getHcState(unit or "player")
+
+	if unitState.hasDied then
+		return HC_STATE.NOT_HARDCORE_ANYMORE
+	end
 
 	if IS_HARDCORE_REALM then
 		return HC_STATE.HARDCORE
 	end
-
-	local unitState = getHcState(unit)
 
 	if unitState.hadExternalHardcore then
 		return HC_STATE.NOT_HARDCORE_ANYMORE
@@ -339,6 +341,8 @@ local deathFrame = CreateFrame("Frame")
 deathFrame:RegisterEvent("PLAYER_DEAD")
 deathFrame:SetScript("OnEvent", function()
 	local unitState = getHcState("player")
+
+	unitState.hasDied = true
 
 	-- External HC: they died, so they HAD it but no longer HAVE it
 	if unitState.hasExternalHardcore then

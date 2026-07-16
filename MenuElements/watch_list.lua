@@ -190,7 +190,7 @@ for i = 1, max_rows do
 			font_strings[i][v[1]]:SetWidth(v[2])
 		end
 		font_strings[i][v[1]]:SetTextColor(1, 1, 1)
-		font_strings[i][v[1]]:SetFont(main_font, 10, " A")
+		font_strings[i][v[1]]:SetFont(main_font, 10, "")
 	end
 
 	row_backgrounds[i] = watch_list_frame:CreateTexture(nil, "OVERLAY")
@@ -466,7 +466,10 @@ function watch_list_frame.updateMenuElement(scroll_frame)
 					return
 				end
 
-				local ui_scale = UIParent:GetEffectiveScale()
+				-- GetLeft() is in the entry's own (scaled) coordinate space, so the
+				-- cursor must be divided by the entry's effective scale — which
+				-- includes the Deathlog menu's user-adjustable scale — not UIParent's.
+				local ui_scale = _entry:GetEffectiveScale()
 				local x = GetCursorPosition() / ui_scale
 				local pos_x = x - _entry:GetLeft()
 				local note_left = font_strings[i]["Note"]:GetLeft() - _entry:GetLeft()

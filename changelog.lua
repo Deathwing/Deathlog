@@ -28,6 +28,18 @@ local NO_CHANGELOG_VERSIONS = {
 local CHANGELOG_CONTENT = [[
 |cFFFFD700Deathlog Changelog|r
 
+|cFF00FF00[0.5.16]|r
+
+|cFFFFFFFFBug Fixes|r
+- Fixed Watch List clicks landing on the wrong column when the Deathlog window is scaled down; the Icon and Remove (X) buttons were unclickable (thanks to Fate)
+- Fixed a death being broadcast a second time when logging back into an already-dead hardcore character, which created duplicate death entries
+- Fixed an error popup that could appear when opening the Watch List tab
+- Fixed an error when opening the Deathlog settings on TBC Anniversary (minimap button, /deathlog options, or the mini log menu)
+- Fixed font error popups that could appear when opening the settings panel on TBC Anniversary
+
+|cFFFFFFFFImprovements|r
+- Updated for the latest WoW Classic TBC Anniversary patch (2.5.6)
+
 |cFF00FF00[0.5.15] - 2026-06-27|r
 
 |cFFFFFFFFNew Features|r
