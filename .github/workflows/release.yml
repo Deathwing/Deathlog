@@ -63,6 +63,8 @@ jobs:
       - name: Create checksums and release notes
         run: |
           set -euo pipefail
+          # DeathlogCompanion is not published yet; keep it out of the release.
+          rm -f dist/DeathlogCompanion.zip
           (cd dist && sha256sum *.zip > SHA256SUMS)
           awk 'BEGIN { found=0 } /^## / { if (found) exit; found=1 } found' ../CHANGELOG.md > dist/release-notes.md
           test -s dist/release-notes.md || cp ../CHANGELOG.md dist/release-notes.md
@@ -82,7 +84,7 @@ jobs:
         continue-on-error: true
         run: |
           if [[ -z "$CF_UPLOAD_TOKEN" ]]; then echo "CF_UPLOAD_TOKEN not configured; skipping."; exit 0; fi
-          node upload.js upload --release
+          node upload.js upload --release --only Deathlog,DeathlogData,DeathNotificationLib,DeathNotificationLibData
 
       - name: Publish bundled package to Wago
         id: wago
