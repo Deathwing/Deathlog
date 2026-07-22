@@ -91,8 +91,9 @@ local function isGuildOrConfederation(guildName)
 		return false
 	end
 	
-	-- Direct match with player's guild
-	if _player_guild and guildName == _player_guild then
+	-- Direct match with player's guild (live fallback if cache is cold)
+	local player_guild = _player_guild or GetGuildInfo("player")
+	if player_guild and guildName == player_guild then
 		return true
 	end
 	
@@ -149,6 +150,10 @@ function _dnl.passesGuildFilterMode(entry, filter_mode)
 	local entryGuild = entry["guild"]
 	local entryName = entry["name"]
 	
+	-- Fall back to a live query if the cache hasn't been populated yet
+	-- (login window before the first refreshGuildMembers tick).
+	local player_guild = _player_guild or GetGuildInfo("player")
+	
 	-- Check guild name match
 	local guildMatches = false
 	if entryGuild and entryGuild ~= "" then
@@ -156,7 +161,7 @@ function _dnl.passesGuildFilterMode(entry, filter_mode)
 			guildMatches = isGuildOrConfederation(entryGuild)
 		else
 			-- guild_only mode
-			guildMatches = (_player_guild and entryGuild == _player_guild) or false
+			guildMatches = (player_guild and entryGuild == player_guild) or false
 		end
 	end
 	

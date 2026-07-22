@@ -2,6 +2,18 @@
 
 All notable changes to Deathlog will be documented in this file.
 
+## [0.5.17] - 2026-07-22
+
+### Bug Fixes
+- Fixed the death alert "Guild Only" filter sometimes not showing alerts for guild members' deaths: a death that had already reached the database through background sync suppressed the subsequent live alert for the same death, and the guild check could reject guildmates right after login before the guild cache was populated. The alert "Test" button now also works while a guild filter is active. (Thanks to Fate for reporting)
+- Fixed shift-clicking a player name in chat opening the Who window instead of printing the result to chat. This happened when a Deathlog background lookup left the who-to-UI flag set; the flag is now reset when shift-clicking player links. (Thanks to Makpptfox)
+
+### Improvements
+- Added an in-game official download-source chooser for GitHub, CurseForge, and Wago. When a newer peer version is detected, use `/dl update` or click the existing update indicator to open it.
+- Release tags now produce installable GitHub assets and publish the bundled addon family to Wago while retaining split dependency packages on CurseForge.
+- The "Inspect user" option in the mini log right-click menu now shows the /who result in the chat window instead of opening the Who panel, giving more info at a glance. (Thanks to Makpptfox)
+- Increased the Watch List note character limit from 20 to 100, so notes can hold a full reminder instead of being cut off. (Thanks to Fate for reporting)
+
 ## [0.5.16] - 2026-07-16
 
 ### Bug Fixes

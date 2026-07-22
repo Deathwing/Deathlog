@@ -22,7 +22,7 @@ local function appendUpdateAvailableTooltip()
 	GameTooltip:AddLine(" ")
 	GameTooltip:AddLine("|TInterface\\GossipFrame\\AvailableQuestIcon:0|t Update Available", 0.3, 1, 0.3)
 	GameTooltip:AddLine(string.format("v%s >> v%s", current, newer), 1, 0.8, 0)
-	GameTooltip:AddLine("Please update to the latest version!", 0.7, 0.7, 0.7)
+	GameTooltip:AddLine("Click to choose an official download source.", 0.7, 0.7, 0.7)
 	return true
 end
 
@@ -62,6 +62,9 @@ function Deathlog_createInfoButton(container, with_events, offset_x, offset_y)
 
 			local state = Deathlog_getHardcoreCharacterState("player")
 			local has_update = DeathNotificationLib.GetNewerAddonVersion("Deathlog") ~= nil
+			info_button:SetScript("OnClick", has_update and function()
+				Deathlog_ShowUpdateSources(DeathNotificationLib.GetNewerAddonVersion("Deathlog"))
+			end or nil)
 
 			-- Allow re-evaluation when update status changes
 			if info_button.deathlog_hc_state == state and info_button.deathlog_has_update == has_update then

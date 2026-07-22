@@ -336,6 +336,7 @@ function watch_list_frame.updateMenuElement(scroll_frame)
 	watch_list_frame.name_box:SetBlinkSpeed(1)
 	-- watch_list_frame.name_box:SetAutoFocus(false)
 	watch_list_frame.name_box:SetMultiLine(false)
+	-- Default cap; overridden per-field on click (20 for names, 100 for notes).
 	watch_list_frame.name_box:SetMaxLetters(20)
 	watch_list_frame.name_box:SetScript("OnEnterPressed", function(self, msg)
 		if edit_box_type == 1 then
@@ -490,6 +491,8 @@ function watch_list_frame.updateMenuElement(scroll_frame)
 						watch_list_frame.name_box:SetHeight(15)
 					end
 					setEditBox(_entry)
+					-- Character names cap at 12; 20 leaves headroom for the status suffix.
+					watch_list_frame.name_box:SetMaxLetters(20)
 					watch_list_frame.name_box:SetText((font_strings[i]["Name"]:GetText() or "<Click to add>"))
 					font_strings[i]["Name"]:SetText("")
 					watch_list_frame.name_box:HighlightText()
@@ -511,6 +514,9 @@ function watch_list_frame.updateMenuElement(scroll_frame)
 						watch_list_frame.name_box:SetHeight(15)
 					end
 					setEditBox(_entry)
+					-- Notes are free-text reminders; the column is wide (650px), so
+					-- allow a full sentence rather than the 20-letter name cap.
+					watch_list_frame.name_box:SetMaxLetters(100)
 					watch_list_frame.name_box:SetText((font_strings[i]["Note"]:GetText() or "<Click to add note>"))
 					font_strings[i]["Note"]:SetText("")
 					watch_list_frame.name_box:HighlightText()

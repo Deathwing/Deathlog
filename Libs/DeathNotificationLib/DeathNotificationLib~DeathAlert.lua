@@ -728,6 +728,10 @@ end
 function _dnl.testDeathAlert()
 	if type(DeathNotificationLib.CreateFakeEntry) == "function" then
 		local fake_entry = DeathNotificationLib.CreateFakeEntry()
+		-- Use the player's own guild so the test alert also fires while a
+		-- guild filter mode is active (otherwise the random guild from the
+		-- fake entry is filtered out and the button appears broken).
+		fake_entry["guild"] = GetGuildInfo("player") or fake_entry["guild"]
 		alert_cache[fake_entry["name"]] = nil
 		_dnl.playDeathAlert(fake_entry)
 	end

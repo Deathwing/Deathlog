@@ -1,0 +1,108 @@
+name: Release Addon
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: playground
+    env:
+      CF_UPLOAD_TOKEN: ${{ secrets.CF_UPLOAD_TOKEN }}
+      WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
+      DISCORD_RELEASE_WEBHOOK_URL: ${{ secrets.DISCORD_RELEASE_WEBHOOK_URL }}
+      WAGO_PROJECT_ID: rN4kPAGD
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout tagged addon
+        uses: actions/checkout@v4
+
+      - name: Checkout private release tooling
+        uses: actions/checkout@v4
+        with:
+          repository: Deathwing/Deathlog-Internal
+          path: playground
+          token: ${{ secrets.INTERNAL_REPO_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        run: pip install luadata numpy surpyval joblib
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: playground/package-lock.json
+
+      - name: Install Node dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Verify tag matches addon version
+        run: |
+          set -euo pipefail
+          toc_version=$(sed -n 's/^## Version:[[:space:]]*//p' ../Deathlog.toc | head -n1)
+          test "${toc_version#v}" = "${GITHUB_REF_NAME#v}" || {
+            echo "Tag $GITHUB_REF_NAME does not match Deathlog.toc version $toc_version"
+            exit 1
+          }
+
+      - name: Generate data and build all packages
+        run: bash deployData.sh --skip-upload
+
+      - name: Create checksums and release notes
+        run: |
+          set -euo pipefail
+          (cd dist && sha256sum *.zip > SHA256SUMS)
+          awk 'BEGIN { found=0 } /^## / { if (found) exit; found=1 } found' ../CHANGELOG.md > dist/release-notes.md
+          test -s dist/release-notes.md || cp ../CHANGELOG.md dist/release-notes.md
+
+      - name: Publish GitHub Release
+        run: |
+          set -euo pipefail
+          if gh release view "$GITHUB_REF_NAME" --repo Deathwing/Deathlog >/dev/null 2>&1; then
+            gh release edit "$GITHUB_REF_NAME" --repo Deathwing/Deathlog --title "$GITHUB_REF_NAME" --notes-file dist/release-notes.md
+            gh release upload "$GITHUB_REF_NAME" --repo Deathwing/Deathlog --clobber dist/*.zip dist/SHA256SUMS
+          else
+            gh release create "$GITHUB_REF_NAME" --repo Deathwing/Deathlog --title "$GITHUB_REF_NAME" --notes-file dist/release-notes.md dist/*.zip dist/SHA256SUMS
+          fi
+
+      - name: Publish split packages to CurseForge
+        id: curseforge
+        continue-on-error: true
+        run: |
+          if [[ -z "$CF_UPLOAD_TOKEN" ]]; then echo "CF_UPLOAD_TOKEN not configured; skipping."; exit 0; fi
+          node upload.js upload --release
+
+      - name: Publish bundled package to Wago
+        id: wago
+        continue-on-error: true
+        run: |
+          if [[ -z "$WAGO_API_TOKEN" ]]; then echo "WAGO_API_TOKEN not configured; skipping."; exit 0; fi
+          node publish-wago.js --project-id "$WAGO_PROJECT_ID" --zip dist/Deathlog_Bundled.zip --toc ../Deathlog.toc --label "$GITHUB_REF_NAME" --changelog ../CHANGELOG.md
+
+      - name: Notify Discord
+        id: discord
+        continue-on-error: true
+        run: |
+          if [[ -z "$DISCORD_RELEASE_WEBHOOK_URL" ]]; then echo "DISCORD_RELEASE_WEBHOOK_URL not configured; skipping."; exit 0; fi
+          node upload.js discord-release
+
+      - name: Verify platform uploads
+        if: always()
+        env:
+          CF_OUTCOME: ${{ steps.curseforge.outcome }}
+          WAGO_OUTCOME: ${{ steps.wago.outcome }}
+          DISCORD_OUTCOME: ${{ steps.discord.outcome }}
+        run: |
+          [[ "$CF_OUTCOME" != failure && "$WAGO_OUTCOME" != failure && "$DISCORD_OUTCOME" != failure ]] || exit 1

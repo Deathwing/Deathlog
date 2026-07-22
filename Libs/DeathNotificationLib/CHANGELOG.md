@@ -1,5 +1,11 @@
 # Changelog
 
+## V22 — 2026-07-22
+
+### Bug Fixes
+- Fixed the death alert "Guild Only" / "Guild + Confederation" filter rejecting guild members' deaths during the login window before the guild cache was populated — `passesGuildFilterMode` and `isGuildOrConfederation` now fall back to a live `GetGuildInfo("player")` query when the cached guild name is nil
+- The "Test" button in the Death Alert options now uses the player's own guild for the fake entry, so it also fires while a guild filter mode is active
+
 ## V21 — 2026-07-15
 
 ### Improvements

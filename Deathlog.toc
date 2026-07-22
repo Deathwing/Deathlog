@@ -5,7 +5,11 @@
 ## Author: Yazpad & Deathwing
 ## X-License: GNU GPL3
 ## X-Category: Leveling,Guild
-## Version: 0.5.16
+## Version: 0.5.17
+## X-Website: https://github.com/Deathwing/Deathlog
+## X-Repository: https://github.com/Deathwing/Deathlog
+## X-Curse-Project-ID: 860689
+## X-Wago-ID: rN4kPAGD
 # DEATHLOG_UNCOMMENT_NEXT_LINE
 # ## Dependencies: DeathNotificationLib
 # DEATHLOG_UNCOMMENT_NEXT_LINE
@@ -38,6 +42,7 @@ utils.lua
 purge.lua
 
 hardcore_state.lua
+update_sources.lua
 info_button.lua
 
 MenuElements/watch_list.lua

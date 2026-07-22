@@ -28,7 +28,17 @@ local NO_CHANGELOG_VERSIONS = {
 local CHANGELOG_CONTENT = [[
 |cFFFFD700Deathlog Changelog|r
 
-|cFF00FF00[0.5.16]|r
+|cFF00FF00[0.5.17] - 2026-07-22|r
+
+|cFFFFFFFFBug Fixes|r
+- Fixed the death alert 'Guild Only' filter sometimes not showing alerts for guild members' deaths (thanks to Fate)
+- Fixed shift-clicking a player name in chat opening the Who window instead of printing the result to chat (thanks to Makpptfox)
+
+|cFFFFFFFFImprovements|r
+- The 'Inspect user' option in the mini log right-click menu now shows the result in the chat window instead of opening the Who panel (thanks to Makpptfox)
+- Watch List notes can now be up to 100 characters instead of 20, so a full reminder fits (thanks to Fate)
+
+|cFF00FF00[0.5.16] - 2026-07-16|r
 
 |cFFFFFFFFBug Fixes|r
 - Fixed Watch List clicks landing on the wrong column when the Deathlog window is scaled down; the Icon and Remove (X) buttons were unclickable (thanks to Fate)

@@ -15,7 +15,7 @@ A WoW Hardcore addon that provides a UI for exploring the deathlog and death sta
 
 This addon is completely safe to run alongside the `Hardcore` addon.  Alternatively, this addon can be run without the Hardcore addon running, however, it does not provide verification for the solo self-found challenge.
 
-See [CHANGELOG.md](CHANGELOG.md) for version history.
+See [CHANGELOG.md](https://github.com/Deathwing/Deathlog/blob/master/CHANGELOG.md) for version history.
 
 ## Contact & Feedback
 
@@ -38,7 +38,7 @@ See [CHANGELOG.md](CHANGELOG.md) for version history.
 * Example: `<name>( the <race> <class>)[ of <guild>] has been slain by <source>[ at lvl <level>][ in <zone>].`
 * Real-time input validation catches unknown tags, unbalanced groups, and formatting errors
 
-![DeathAlert](git_images/deathalert.png)
+![DeathAlert](https://raw.githubusercontent.com/Deathwing/Deathlog/master/git_images/deathalert.png)
 
 ### Death Report Widget (TBC Anniversary / Soul of Iron)
 * Detects when a nearby player loses their Soul of Iron
@@ -58,7 +58,7 @@ See [CHANGELOG.md](CHANGELOG.md) for version history.
 * Search by name, level, class, race, guild, zone, death source, and more
 * Filter by server, level range, and class
 
-![Deathlog](git_images/deathlog_deathlog.png)
+![Deathlog](https://raw.githubusercontent.com/Deathwing/Deathlog/master/git_images/deathlog_deathlog.png)
 
 ### Statistics per Zone
 * Fully functional map with heatmap overlay and death location overlays
@@ -66,37 +66,37 @@ See [CHANGELOG.md](CHANGELOG.md) for version history.
 * Death statistics by class with probability density graphs
 * Continental aggregation: Kalimdor, Eastern Kingdoms, Outland, or all of Azeroth
 
-![Westfall death statistics](git_images/statistics_westfall.png)
+![Westfall death statistics](https://raw.githubusercontent.com/Deathwing/Deathlog/master/git_images/statistics_westfall.png)
 
 ### Statistics per Instance
 * Death stats for all Classic & TBC dungeons and raids
 * Scrollable grid for easy navigation
 
-![Instance Stats](git_images/instance_stats.png)
+![Instance Stats](https://raw.githubusercontent.com/Deathwing/Deathlog/master/git_images/instance_stats.png)
 
 ### Statistics by NPC/Creature
 * Normalized and total kill rankings across Azeroth
 * Creature locations and 3D models
 
-![Instance Stats](git_images/creature_stats.png)
+![Instance Stats](https://raw.githubusercontent.com/Deathwing/Deathlog/master/git_images/creature_stats.png)
 
 ### Minilog Widget
 * Configurable columns and font
 * Toggle with `/dl minilog` or Ctrl-click on the minimap button
 * Playtime column available
 
-![custom deathlog](git_images/deathlog_custom.png)
+![custom deathlog](https://raw.githubusercontent.com/Deathwing/Deathlog/master/git_images/deathlog_custom.png)
 
 ### Heatmap
 * Skull icon turns red when you enter a dangerous area
 * World map overlay shows death hotspots
 
-![heatmap icon](git_images/heatmap_icon.png)
+![heatmap icon](https://raw.githubusercontent.com/Deathwing/Deathlog/master/git_images/heatmap_icon.png)
 
 ### Tooltip Information
 * NPC deadly ranking shown on hover
 
-![tooltip](git_images/tooltip_mod.png)
+![tooltip](https://raw.githubusercontent.com/Deathwing/Deathlog/master/git_images/tooltip_mod.png)
 
 ### Data Contribution
 * One-time popup for users with large databases, asking you to share data with the community

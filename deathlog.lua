@@ -272,6 +272,17 @@ local function newEntry(_player_data, _checksum, num_peer_checks, in_guild, sour
 
 	local alert_player_data = _player_data
 
+	-- Whitelist alert-eligible entries BEFORE the dedup early-returns below.
+	-- If this live death already reached the DB through an alert-ineligible
+	-- path (sync backfill, watchlist query), the dedup branches merge and
+	-- return early; without the whitelist, the alertFilter would then
+	-- suppress the alert via the map_pos identity check (the incoming data
+	-- was just merged into the stored entry). Duplicate popups are prevented
+	-- by DNL's own per-name alert cache.
+	if source == SOURCE.SELF_DEATH or source == SOURCE.PEER_BROADCAST or source == SOURCE.BLIZZARD then
+		deathAlertWhitelist[alert_player_data] = true
+	end
+
 	-- Check ALL existing entries for this player name for near-duplicate deaths.
 	-- The old approach only checked the single latest entry via deathlog_data_map,
 	-- which missed duplicates when the latest entry was a different (newer) death.
@@ -324,7 +335,6 @@ local function newEntry(_player_data, _checksum, num_peer_checks, in_guild, sour
 	-- Only create widgets for self-reported deaths, peer broadcasts, and Blizzard notifications.
 	-- Death alert is now handled internally by DNL (~DeathAlert.lua) via createEntry().
 	if source == SOURCE.SELF_DEATH or source == SOURCE.PEER_BROADCAST or source == SOURCE.BLIZZARD then
-		deathAlertWhitelist[alert_player_data] = true
 		Deathlog_widget_minilog_createEntry(_player_data)
 	end
 
@@ -570,6 +580,8 @@ local function SlashHandler(msg, editbox)
 		if Deathlog_ShowChangelog then
 			Deathlog_ShowChangelog()
 		end
+	elseif command == "update" or command == "updates" then
+		Deathlog_ShowUpdateSources()
 	elseif command == "minilog" or command == "mini" or command == "mini-log" or command == "ml" then
 		handleMiniLogCommand(arg)
 	else
