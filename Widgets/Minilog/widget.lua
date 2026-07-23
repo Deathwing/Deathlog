@@ -690,7 +690,8 @@ function Deathlog_minilog_refreshEntries()
 	end
 
 	clearVisibleEntries()
-	local ordered_entries = DeathlogOrderByFast(deathlog_data or {})
+	-- Only the first #row_entry entries are ever read below, so ask for just those.
+	local ordered_entries = DeathlogOrderByFast(deathlog_data or {}, #row_entry)
 	local max_visible_entries = math.min(#ordered_entries, #row_entry)
 	for i = max_visible_entries, 1, -1 do
 		Deathlog_widget_minilog_createEntry(ordered_entries[i])

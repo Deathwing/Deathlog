@@ -737,22 +737,60 @@ function DeathlogOrderBy(_deathlog, order_function)
 end
 
 -- Optimized version: sorts by date descending, uses native table.sort (much faster for large datasets)
-function DeathlogOrderByFast(_deathlog)
+-- `limit` is optional. Callers that only display the newest few entries should pass it: the newest
+-- `limit` entries are then picked in a single linear pass, which keeps table.sort out of the call
+-- entirely. On large logs the old comparator (a tonumber() conversion per comparison) made the sort
+-- exceed the client's sort time limit and threw "sort ran for too long".
+function DeathlogOrderByFast(_deathlog, limit)
 	local list = {}
+	local dates = {}
 	local n = 0
 	for _, entry_tbl in pairs(_deathlog) do
 		for _, v in pairs(entry_tbl) do
 			if Deathlog_shouldShowEntry(v) then
 				n = n + 1
 				list[n] = v
+				dates[n] = tonumber(v.date) or 0
 			end
 		end
 	end
-	-- Sort descending by date (newest first) using native table.sort
+
+	if limit and limit > 0 and limit < n then
+		-- Keep a small list of the newest entries, held sorted descending by insertion.
+		local top = {}
+		local top_dates = {}
+		local count = 0
+		for i = 1, n do
+			local date = dates[i]
+			local insert = false
+			if count < limit then
+				count = count + 1
+				insert = true
+			elseif date > top_dates[count] then
+				insert = true
+			end
+			if insert then
+				local pos = count
+				while pos > 1 and top_dates[pos - 1] < date do
+					top[pos] = top[pos - 1]
+					top_dates[pos] = top_dates[pos - 1]
+					pos = pos - 1
+				end
+				top[pos] = list[i]
+				top_dates[pos] = date
+			end
+		end
+		return top
+	end
+
+	-- Sort descending by date (newest first) using native table.sort.
+	-- The date is converted once per entry above so the comparator stays a plain table lookup.
+	local date_of = {}
+	for i = 1, n do
+		date_of[list[i]] = dates[i]
+	end
 	table.sort(list, function(a, b)
-		local date_a = tonumber(a.date) or 0
-		local date_b = tonumber(b.date) or 0
-		return date_a > date_b
+		return date_of[a] > date_of[b]
 	end)
 	return list
 end
