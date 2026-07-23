@@ -2,6 +2,14 @@
 
 All notable changes to Deathlog will be documented in this file.
 
+## [0.5.18] - 2026-07-23
+
+### Fixes
+- Fixed a "sort ran for too long" error on large death logs that broke the minilog under the tighter script execution limits of Classic Era 1.15.9. The date sort comparator no longer converts dates on every comparison, and the minilog only selects the newest entries it can display instead of sorting the entire log. (#5, thanks @Spigot12)
+
+### Improvements
+- Updated the TOC for WoW Classic Era 1.15.9.
+
 ## [0.5.17] - 2026-07-22
 
 ### Bug Fixes

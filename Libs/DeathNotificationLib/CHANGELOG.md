@@ -1,5 +1,13 @@
 # Changelog
 
+## V23 — 2026-07-23
+
+### Bug Fixes
+- Fixed a "script ran too long" error during sync peer election on large databases under the tighter script execution limits of Classic Era 1.15.9 — local entry counts are now cached for 30 seconds instead of rescanning the whole database once per collected watermark peer in a single frame
+
+### Improvements
+- Updated the TOC for WoW Classic Era 1.15.9.
+
 ## V22 — 2026-07-22
 
 ### Bug Fixes

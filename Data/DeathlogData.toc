@@ -1,10 +1,21 @@
-## Interface: 20506, 11508
+## Interface: 20506, 11509
 ## Title: Deathlog Data
 ## Notes: Precomputed statistics data for Deathlog.
 ## IconTexture: Interface\AddOns\DeathlogData\Media\logo.png
 ## Author: Deathwing
 ## X-License: GNU GPL3
 ## X-Category: Library
+## Category-enUS: Libraries
+## Category-deDE: Bibliotheken
+## Category-esES: Bibliotecas
+## Category-esMX: Bibliotecas
+## Category-frFR: Bibliothèques
+## Category-itIT: Librerie
+## Category-koKR: 라이브러리
+## Category-ptBR: Bibliotecas
+## Category-ruRU: Библиотеки
+## Category-zhCN: 函数库
+## Category-zhTW: 函式庫
 ## Version: 1784764800
 
 DeathlogData.xml

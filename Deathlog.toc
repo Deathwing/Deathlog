@@ -1,11 +1,12 @@
-## Interface: 20506, 11508
+## Interface: 20506, 11509
 ## Title: Deathlog
 ## Notes: Only for Hardcore on classic era or Burning Crusade Anniversary servers.
 ## IconTexture: Interface\AddOns\Deathlog\Media\logo.png
 ## Author: Yazpad & Deathwing
 ## X-License: GNU GPL3
 ## X-Category: Leveling,Guild
-## Version: 0.5.17
+## Category: Hardcore
+## Version: 0.5.18
 ## X-Website: https://github.com/Deathwing/Deathlog
 ## X-Repository: https://github.com/Deathwing/Deathlog
 ## X-Curse-Project-ID: 860689

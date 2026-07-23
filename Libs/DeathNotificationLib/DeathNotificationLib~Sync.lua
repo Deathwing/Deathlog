@@ -367,6 +367,35 @@ local function countLocalEntries(db, days)
 	return count
 end
 
+--- How long a cached entry count stays valid (seconds). Counts only gate
+--- the sync trigger (gap >= SYNC_THRESHOLD), so short-lived staleness is
+--- harmless — watermarks rebroadcast every sync interval anyway.
+local COUNT_CACHE_TTL = 30
+
+--- Cached entry counts: [tag..":"..days] = { count = N, at = ts }.
+--- countLocalEntries is a full O(n) scan of the addon's db. During peer
+--- election it used to run once per collected watermark peer in a single
+--- frame; on large databases that exceeded 1.15.9's tightened script
+--- execution budget ("script ran too long"). All peers of the same
+--- addon+window need the same number, so one scan per TTL suffices.
+local count_cache = {}
+
+---Cached wrapper around countLocalEntries for an addon's db.
+---@param addon table  Registered addon entry (needs .tag and .db)
+---@param days number  Window in days (-1 = all)
+---@return number count
+local function cachedCountLocalEntries(addon, days)
+	local key = addon.tag .. ":" .. days
+	local now = GetServerTime()
+	local hit = count_cache[key]
+	if hit and (now - hit.at) < COUNT_CACHE_TTL then
+		return hit.count
+	end
+	local count = countLocalEntries(addon.db, days)
+	count_cache[key] = { count = count, at = now }
+	return count
+end
+
 ---Broadcast watermarks on the sync channel — one per addon with a database.
 ---Each addon's own settings determine whether it syncs and its window.
 ---Format: "W$TAG~ts~count~window~addon_version~"
@@ -537,7 +566,7 @@ function _dnl.handleSyncWatermark(sender, payload)
 	local cmp_window = math.min(
 		local_window == -1 and 9999 or local_window,
 		window == -1 and 9999 or window)
-	local local_count = countLocalEntries(local_addon.db, cmp_window)
+	local local_count = cachedCountLocalEntries(local_addon, cmp_window)
 	if count - local_count < SYNC_THRESHOLD then return end
 
 	-- Start collecting watermarks to find the best peer
@@ -588,7 +617,7 @@ function _dnl._syncPickPeerAndJitter()
 				local cmp_window = math.min(
 					local_window == -1 and 9999 or local_window,
 					info.window == -1 and 9999 or info.window)
-				local local_count = countLocalEntries(addon.db, cmp_window)
+				local local_count = cachedCountLocalEntries(addon, cmp_window)
 				local gap = info.count - local_count
 				if gap > best_gap then
 					best_key = key
