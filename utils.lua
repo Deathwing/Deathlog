@@ -100,6 +100,40 @@ for _, instances in pairs(instance_to_id) do
 	end
 end
 
+-- ============================================================
+-- Cooperative yielding for heavy precomputation
+-- ============================================================
+-- The precompute functions below iterate the entire death log. On large logs a
+-- single function call exceeds Classic Era 1.15.9's per-frame "script ran too
+-- long" limit. To stay under it we run the precompute inside a coroutine and
+-- call Deathlog_YieldCheck() from the innermost per-entry loops: every
+-- DEATHLOG_YIELD_CHUNK processed entries it yields back to the driver, which
+-- resumes the coroutine on the next frame with a fresh script-time budget.
+-- When not running inside our coroutine (e.g. the cached path or any synchronous
+-- caller), Deathlog_YieldCheck() is a cheap no-op.
+local DEATHLOG_YIELD_CHUNK = 300
+local deathlog_yield_active = false
+local deathlog_yield_counter = 0
+
+function Deathlog_SetYieldActive(active)
+	deathlog_yield_active = active and true or false
+	deathlog_yield_counter = 0
+end
+
+function Deathlog_YieldCheck()
+	if not deathlog_yield_active then
+		return
+	end
+	deathlog_yield_counter = deathlog_yield_counter + 1
+	-- WoW runs Lua 5.1, which has no coroutine.isyieldable(); use
+	-- coroutine.running() (returns the current coroutine, or nil on the main
+	-- thread) to confirm we're inside our precompute coroutine before yielding.
+	if deathlog_yield_counter >= DEATHLOG_YIELD_CHUNK and coroutine.running() then
+		deathlog_yield_counter = 0
+		coroutine.yield()
+	end
+end
+
 -- Instance minimum level requirements (from MapDifficulty game data + manual raid entries)
 -- Maps instance_id -> minimum player level required to enter
 local instance_min_levels = {
@@ -713,6 +747,9 @@ function DeathlogFilter(_deathlog_data, filter)
 	for server_name, entry_tbl in pairs(_deathlog_data) do
 		filtered_death_log[server_name] = {}
 		for checksum, entry in pairs(entry_tbl) do
+			-- A single full-dataset filter can overrun one frame on large logs.
+			-- No-op unless running inside the precompute coroutine.
+			Deathlog_YieldCheck()
 			if Deathlog_shouldShowEntry(entry) and filter(server_name, entry) then
 				filtered_death_log[server_name][checksum] = entry
 			end
@@ -736,11 +773,23 @@ function DeathlogOrderBy(_deathlog, order_function)
 	return ordered
 end
 
--- Optimized version: sorts by date descending, uses native table.sort (much faster for large datasets)
--- `limit` is optional. Callers that only display the newest few entries should pass it: the newest
--- `limit` entries are then picked in a single linear pass, which keeps table.sort out of the call
--- entirely. On large logs the old comparator (a tonumber() conversion per comparison) made the sort
--- exceed the client's sort time limit and threw "sort ran for too long".
+-- Only limits at or below this use the linear insertion-based top-N pick. That
+-- pass is O(n * limit), so it is only cheaper than a full sort for SMALL limits
+-- (e.g. the minilog's ~20 rows). For large limits (e.g. the log menu's cap of a
+-- few thousand) the insertion pass becomes pathological and can trip the
+-- client's "script ran too long" limit, so those fall through to a single
+-- O(n log n) table.sort and are truncated afterwards.
+local DEATHLOG_TOPN_LINEAR_LIMIT = 200
+
+-- Sorts by date descending. `limit` is optional:
+--   * small limit  -> newest `limit` entries picked in a linear insertion pass
+--     (no table.sort at all), ideal for the minilog.
+--   * large limit  -> full table.sort with a precomputed-date comparator, then
+--     truncated to `limit`. O(n log n) regardless of limit.
+--   * no limit     -> full table.sort.
+-- The date is converted to a number ONCE per entry (into `dates`), so the sort
+-- comparator stays a plain table lookup and never re-runs tonumber() per
+-- comparison (which is what made the old sort exceed the client's limit).
 function DeathlogOrderByFast(_deathlog, limit)
 	local list = {}
 	local dates = {}
@@ -755,7 +804,7 @@ function DeathlogOrderByFast(_deathlog, limit)
 		end
 	end
 
-	if limit and limit > 0 and limit < n then
+	if limit and limit > 0 and limit < n and limit <= DEATHLOG_TOPN_LINEAR_LIMIT then
 		-- Keep a small list of the newest entries, held sorted descending by insertion.
 		local top = {}
 		local top_dates = {}
@@ -784,7 +833,6 @@ function DeathlogOrderByFast(_deathlog, limit)
 	end
 
 	-- Sort descending by date (newest first) using native table.sort.
-	-- The date is converted once per entry above so the comparator stays a plain table lookup.
 	local date_of = {}
 	for i = 1, n do
 		date_of[list[i]] = dates[i]
@@ -792,6 +840,16 @@ function DeathlogOrderByFast(_deathlog, limit)
 	table.sort(list, function(a, b)
 		return date_of[a] > date_of[b]
 	end)
+
+	-- Truncate to the newest `limit` entries when a (large) limit was requested.
+	if limit and limit > 0 and limit < n then
+		local truncated = {}
+		for i = 1, limit do
+			truncated[i] = list[i]
+		end
+		return truncated
+	end
+
 	return list
 end
 
@@ -1098,6 +1156,7 @@ function Deathlog_calculate_statistics(_deathlog_data)
 
 				local map_id = entry["map_id"] or entry["instance_id"] or "all"
 				updateStats(stats, server_name, entry)
+				Deathlog_YieldCheck()
 			end
 		end
 	end
@@ -1158,98 +1217,96 @@ function Deathlog_serializeTable(val, name, skipnewlines, depth)
 	return tmp
 end
 
--- Output format matches Python preprocessor: result[class_id] = {ln_mean, ln_std_dev, total}
-local function calculateLogNormalParametersForMap(_deathlog_data, map_id)
-	local function filter_by_map_function(servername, entry)
-		-- For Root Map, include all data
-		if map_id == Deathlog_ROOT_MAP_ID then
-			return true
+-- Single-pass computation of per-zone, per-class level distributions.
+--
+-- The previous implementation called a per-map helper for EVERY zone and EVERY
+-- instance, and each call scanned the entire death log (O(maps * entries)). On a
+-- large log that is minutes of work even when spread across frames. This version
+-- makes a single pass over the log, bucketing each entry's level into every map
+-- it contributes to (its zone + all container ancestors + the "all" aggregate,
+-- plus the "all instances" bucket for instance deaths) — exactly mirroring the
+-- targeting used by Deathlog_calculate_statistics — then computes the log-normal
+-- parameters once per (map, class). Complexity is O(entries * ancestors), the
+-- same as the statistics pass. Maps with no matching deaths are simply absent
+-- from the result (nil); all consumers already null-guard these lookups.
+function Deathlog_calculateLogNormalParameters(_deathlog_data)
+	-- levels_by_map[map_id][class_id] = { level, level, ... }
+	local levels_by_map = {}
+
+	local function bucketLevel(map_id, class_id, level)
+		local by_class = levels_by_map[map_id]
+		if by_class == nil then
+			by_class = {}
+			levels_by_map[map_id] = by_class
 		end
-		-- ALL_INSTANCES aggregate: include any entry whose instance_id is valid
-		if map_id == Deathlog_ALL_INSTANCES_ID then
-			local iid = entry["instance_id"]
-			return iid ~= nil and all_instance_id_set[iid] == true
+		local levels = by_class[class_id]
+		if levels == nil then
+			levels = {}
+			by_class[class_id] = levels
 		end
-		-- For container zones (continents, Outland), check if entry's zone is a descendant
-		if Deathlog_is_container_zone(map_id) then
-			local entry_map = entry["map_id"] or entry["instance_id"]
-			if entry_map then
-				local ancestors = Deathlog_get_zone_ancestors(entry_map)
-				for _, ancestor_id in ipairs(ancestors) do
-					if ancestor_id == map_id then
-						return true
+		levels[#levels + 1] = level
+	end
+
+	for _, entry_tbl in pairs(_deathlog_data) do
+		for _, entry in pairs(entry_tbl) do
+			if Deathlog_shouldShowEntry(entry) then
+				local class_id = entry["class_id"]
+				local level = entry["level"]
+				if class_id and level and level > 0 then
+					-- "all" aggregate across every zone.
+					bucketLevel("all", class_id, level)
+
+					-- The entry's own zone and all its container ancestors.
+					local entry_map_id = entry["map_id"] or entry["instance_id"]
+					if entry_map_id then
+						local ancestors = Deathlog_get_zone_ancestors(entry_map_id)
+						for _, zone_id in ipairs(ancestors) do
+							if zone_id ~= "all" then
+								bucketLevel(zone_id, class_id, level)
+							end
+						end
+					end
+
+					-- "all instances" aggregate bucket for instance deaths.
+					local iid = entry["instance_id"]
+					if iid and all_instance_id_set[iid] then
+						bucketLevel(Deathlog_ALL_INSTANCES_ID, class_id, level)
 					end
 				end
 			end
-			return false
-		end
-		-- For regular zones, exact match
-		if entry["map_id"] == map_id or entry["instance_id"] == map_id then
-			return true
-		end
-		return false
-	end
-	local filtered_by_map = DeathlogFilter(_deathlog_data, filter_by_map_function)
-
-	-- Collect levels per class_id
-	local levels_by_class = {}
-	for servername, entry_tbl in pairs(filtered_by_map) do
-		for _, v in pairs(entry_tbl) do
-			if v["class_id"] and v["level"] and v["level"] > 0 then
-				local cid = v["class_id"]
-				if not levels_by_class[cid] then
-					levels_by_class[cid] = {}
-				end
-				levels_by_class[cid][#levels_by_class[cid] + 1] = v["level"]
-			end
+			Deathlog_YieldCheck()
 		end
 	end
 
-	-- Compute log-normal params per class: result[class_id] = {ln_mean, ln_std_dev, total}
-	local result = {}
-	for cid, levels in pairs(levels_by_class) do
-		local total = #levels
-		if total > 0 then
-			local ln_mean = 0
-			for _, lvl in ipairs(levels) do
-				ln_mean = ln_mean + math.log(lvl)
-			end
-			ln_mean = ln_mean / total
-
-			local ln_std_dev = 0
-			for _, lvl in ipairs(levels) do
-				local diff = math.log(lvl) - ln_mean
-				ln_std_dev = ln_std_dev + diff * diff
-			end
-			ln_std_dev = ln_std_dev / total
-			if ln_std_dev < 0.01 then ln_std_dev = 0.01 end
-
-			result[cid] = { ln_mean, ln_std_dev, total }
-		end
-	end
-	return result
-end
-
-function Deathlog_calculateLogNormalParameters(_deathlog_data)
+	-- Compute log-normal params per (map, class): result[class_id] = {ln_mean, ln_std_dev, total}
 	local log_normal_params = {}
+	for map_id, by_class in pairs(levels_by_map) do
+		local result = {}
+		for class_id, levels in pairs(by_class) do
+			local total = #levels
+			if total > 0 then
+				local ln_mean = 0
+				for _, lvl in ipairs(levels) do
+					ln_mean = ln_mean + math.log(lvl)
+					Deathlog_YieldCheck()
+				end
+				ln_mean = ln_mean / total
 
-	-- "all" key: aggregate across all data (matches Python's dists["all"])
-	log_normal_params["all"] = calculateLogNormalParametersForMap(_deathlog_data, Deathlog_ROOT_MAP_ID)
+				local ln_std_dev = 0
+				for _, lvl in ipairs(levels) do
+					local diff = math.log(lvl) - ln_mean
+					ln_std_dev = ln_std_dev + diff * diff
+					Deathlog_YieldCheck()
+				end
+				ln_std_dev = ln_std_dev / total
+				if ln_std_dev < 0.01 then ln_std_dev = 0.01 end
 
-	for _, zones in pairs(zone_to_id) do
-		for _, v in pairs(zones) do
-			log_normal_params[v] = calculateLogNormalParametersForMap(_deathlog_data, v)
+				result[class_id] = { ln_mean, ln_std_dev, total }
+			end
 		end
+		log_normal_params[map_id] = result
+		Deathlog_YieldCheck()
 	end
-
-	for _, instances in pairs(instance_to_id) do
-		for _, v in pairs(instances) do
-			log_normal_params[v] = calculateLogNormalParametersForMap(_deathlog_data, v)
-		end
-	end
-
-	-- "all instances" aggregate bucket
-	log_normal_params[Deathlog_ALL_INSTANCES_ID] = calculateLogNormalParametersForMap(_deathlog_data, Deathlog_ALL_INSTANCES_ID)
 
 	return log_normal_params
 end
@@ -1291,6 +1348,7 @@ function Deathlog_calculateMostDeadlyByZone(_deathlog_data)
 
 	for _, entry_tbl in pairs(_deathlog_data) do
 		for _, v in pairs(entry_tbl) do
+			Deathlog_YieldCheck()
 			local source_id = tonumber(v["source_id"])
 			if source_id then
 				-- Count for "all" zones
@@ -1395,6 +1453,7 @@ function Deathlog_calculateCauseStats(_deathlog_data)
 	for _, entry_tbl in pairs(_deathlog_data) do
 		for _, entry in pairs(entry_tbl) do
 			if Deathlog_shouldShowEntry(entry) then
+				Deathlog_YieldCheck()
 				local source_id = tonumber(entry["source_id"])
 				local kind = Deathlog_GetSourceKind(source_id)
 				local entry_map_id = entry["map_id"] or entry["instance_id"] or "all"
@@ -1493,6 +1552,7 @@ function Deathlog_calculateSkullLocs(_deathlog_data)
 	local skull_locs = {}
 	for _, entry_tbl in pairs(_deathlog_data) do
 		for _, v in pairs(entry_tbl) do
+			Deathlog_YieldCheck()
 			if v["map_id"] and v["map_pos"] then
 				local mid = v["map_id"]
 				if not skull_locs[mid] then skull_locs[mid] = {} end
@@ -1518,12 +1578,14 @@ function Deathlog_calculateSkullLocs(_deathlog_data)
 					local d = current_deaths[di]
 					local px, py = transformPoint(bounds, d[1], d[2])
 					transformed[#transformed + 1] = { px, py, d[3] }
+					Deathlog_YieldCheck()
 				end
 				if #transformed == 0 then break end
 				if not skull_locs[parent_id] then skull_locs[parent_id] = {} end
 				local parent_tbl = skull_locs[parent_id]
 				for ti = 1, #transformed do
 					parent_tbl[#parent_tbl + 1] = transformed[ti]
+					Deathlog_YieldCheck()
 				end
 				current_deaths = transformed
 			end
@@ -1544,6 +1606,7 @@ function Deathlog_calculateHeatmapIntensity(skull_locs)
 		heatmap[mapid] = {}
 		local max_intensity = 0
 		for _, t in ipairs(d) do
+			Deathlog_YieldCheck()
 			local _x = ceil(t[1] / 10)
 			local _y = ceil(t[2] / 10)
 			for xi = 0, 2 do
@@ -1582,6 +1645,7 @@ function Deathlog_calculateHeatmapIntensityByCause(skull_locs)
 
 	for mapid, deaths in pairs(skull_locs) do
 		for _, death in ipairs(deaths) do
+			Deathlog_YieldCheck()
 			local kind = Deathlog_GetSourceKind(death[3])
 			if skull_locs_by_cause[kind] == nil then
 				skull_locs_by_cause[kind] = {}
@@ -1607,6 +1671,7 @@ function Deathlog_calculateHeatmapCreatureSubset(skull_locs)
 	for mapid, deaths in pairs(skull_locs) do
 		creature_subset[mapid] = {}
 		for _, death in ipairs(deaths) do
+			Deathlog_YieldCheck()
 			local x = ceil(death[1] / 10)
 			local y = ceil(death[2] / 10)
 			local source_id = death[3]

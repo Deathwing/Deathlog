@@ -516,7 +516,10 @@ local function displayPageFromCache()
 end
 
 local function setDeathlogMenuLogData(data)
-	-- Sort and cache the filtered results
+	-- Sort and cache the filtered results. The full result set is sorted via a
+	-- single O(n log n) table.sort with a precomputed-date comparator, which
+	-- stays within the client's per-frame script limit even on large logs, so no
+	-- result cap is needed.
 	local ordered = DeathlogOrderByFast(data)
 	cached_sorted_results = ordered
 	cached_filter_version = cached_filter_version + 1
@@ -1926,7 +1929,7 @@ local function drawLogTab(container)
 
 	if font_container.prev_button == nil then
 		font_container.prev_button = CreateFrame("Button", nil, font_container)
-		font_container.prev_button:SetPoint("CENTER", font_container.page_str, "CENTER", -50, 0)
+		font_container.prev_button:SetPoint("CENTER", font_container.page_str, "CENTER", -85, 0)
 		font_container.prev_button:SetWidth(25)
 		font_container.prev_button:SetHeight(25)
 		font_container.prev_button:SetNormalTexture("Interface/Buttons/UI-SpellbookIcon-PrevPage-Up.PNG")
@@ -1935,7 +1938,7 @@ local function drawLogTab(container)
 	end
 
 	font_container.prev_button:ClearAllPoints()
-	font_container.prev_button:SetPoint("CENTER", font_container.page_str, "CENTER", -50, 0)
+	font_container.prev_button:SetPoint("CENTER", font_container.page_str, "CENTER", -85, 0)
 
 	font_container.prev_button:SetScript("OnClick", function()
 		if page_number > 1 then
@@ -1948,7 +1951,7 @@ local function drawLogTab(container)
 
 	if font_container.next_button == nil then
 		font_container.next_button = CreateFrame("Button", nil, font_container)
-		font_container.next_button:SetPoint("CENTER", font_container.page_str, "CENTER", 50, 0)
+		font_container.next_button:SetPoint("CENTER", font_container.page_str, "CENTER", 85, 0)
 		font_container.next_button:SetWidth(25)
 		font_container.next_button:SetHeight(25)
 		font_container.next_button:SetNormalTexture("Interface/Buttons/UI-SpellbookIcon-NextPage-Up.PNG")
@@ -1957,7 +1960,7 @@ local function drawLogTab(container)
 	end
 
 	font_container.next_button:ClearAllPoints()
-	font_container.next_button:SetPoint("CENTER", font_container.page_str, "CENTER", 50, 0)
+	font_container.next_button:SetPoint("CENTER", font_container.page_str, "CENTER", 85, 0)
 
 	font_container.next_button:SetScript("OnClick", function()
 		if page_number < total_pages then

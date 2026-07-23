@@ -495,6 +495,19 @@ local function handleEvent(self, event, ...)
 			addon_version    = version,
 		})
 		DeathNotificationLib.HookOnNewAddonEntry("Deathlog", newEntry)
+
+		-- Precomputation of statistics/heatmaps is heavy and, on large datasets,
+		-- exceeds the client's per-frame script limit ("script ran too long")
+		-- when run all at once. The results are cached in deathlog_precomputed,
+		-- so this only runs on a first login or after a version change; but that
+		-- first run must be spread across frames. We collect the individual
+		-- heavy computations into `precompute_steps` (each does one function's
+		-- worth of work), run them one per frame, then finalize (copy results
+		-- into the *DataCopy tables and load widgets). When nothing needs
+		-- computing (normal reload), `precompute_steps` is empty and the
+		-- finalizer runs immediately in this frame, preserving fast behavior.
+		local precompute_steps = {}
+
 		if DeathlogDataCopy.PRECOMPUTED_GENERAL_STATS and DeathlogDataCopy.PRECOMPUTED_LOG_NORMAL_PARAMS and DeathlogDataCopy.PRECOMPUTED_LOG_NORMAL_PARAMS_BY_CAUSE and DeathlogDataCopy.PRECOMPUTED_KAPLAN_MEIER and DeathlogDataCopy.PRECOMPUTED_KAPLAN_MEIER_BY_CAUSE and DeathlogDataCopy.PRECOMPUTED_MOST_DEADLY_BY_ZONE and DeathlogDataCopy.PRECOMPUTED_CAUSE_STATS and DeathlogDataCopy.PRECOMPUTED_PURGES then
 			deathlog_precomputed.PRECOMPUTED_GENERAL_STATS = nil
 			deathlog_precomputed.PRECOMPUTED_LOG_NORMAL_PARAMS = nil
@@ -507,60 +520,119 @@ local function handleEvent(self, event, ...)
 		else
 			if not (version == deathlog_precomputed.DD_VERSION and deathlog_precomputed.PRECOMPUTED_GENERAL_STATS and deathlog_precomputed.PRECOMPUTED_LOG_NORMAL_PARAMS and deathlog_precomputed.PRECOMPUTED_LOG_NORMAL_PARAMS_BY_CAUSE and deathlog_precomputed.PRECOMPUTED_KAPLAN_MEIER and deathlog_precomputed.PRECOMPUTED_KAPLAN_MEIER_BY_CAUSE and deathlog_precomputed.PRECOMPUTED_MOST_DEADLY_BY_ZONE and deathlog_precomputed.PRECOMPUTED_CAUSE_STATS and deathlog_precomputed.PRECOMPUTED_PURGES) then
 				deathlog_precomputed.DD_VERSION = version
-				deathlog_precomputed.PRECOMPUTED_GENERAL_STATS = Deathlog_calculate_statistics(deathlog_data)
-				deathlog_precomputed.PRECOMPUTED_LOG_NORMAL_PARAMS = Deathlog_calculateLogNormalParameters(deathlog_data)
-				deathlog_precomputed.PRECOMPUTED_LOG_NORMAL_PARAMS_BY_CAUSE = Deathlog_calculateLogNormalParametersByCause(deathlog_data)
-				deathlog_precomputed.PRECOMPUTED_KAPLAN_MEIER = Deathlog_calculateKaplanMeier(deathlog_data)
-				deathlog_precomputed.PRECOMPUTED_KAPLAN_MEIER_BY_CAUSE = Deathlog_calculateKaplanMeierByCause(deathlog_data)
-				deathlog_precomputed.PRECOMPUTED_MOST_DEADLY_BY_ZONE = Deathlog_calculateMostDeadlyByZone(deathlog_data)
-				deathlog_precomputed.PRECOMPUTED_CAUSE_STATS = Deathlog_calculateCauseStats(deathlog_data)
-				deathlog_precomputed.PRECOMPUTED_PURGES = Deathlog_calculatePurges(deathlog_data)
+				precompute_steps[#precompute_steps + 1] = function() deathlog_precomputed.PRECOMPUTED_GENERAL_STATS = Deathlog_calculate_statistics(deathlog_data) end
+				precompute_steps[#precompute_steps + 1] = function() deathlog_precomputed.PRECOMPUTED_LOG_NORMAL_PARAMS = Deathlog_calculateLogNormalParameters(deathlog_data) end
+				precompute_steps[#precompute_steps + 1] = function() deathlog_precomputed.PRECOMPUTED_LOG_NORMAL_PARAMS_BY_CAUSE = Deathlog_calculateLogNormalParametersByCause(deathlog_data) end
+				precompute_steps[#precompute_steps + 1] = function() deathlog_precomputed.PRECOMPUTED_KAPLAN_MEIER = Deathlog_calculateKaplanMeier(deathlog_data) end
+				precompute_steps[#precompute_steps + 1] = function() deathlog_precomputed.PRECOMPUTED_KAPLAN_MEIER_BY_CAUSE = Deathlog_calculateKaplanMeierByCause(deathlog_data) end
+				precompute_steps[#precompute_steps + 1] = function() deathlog_precomputed.PRECOMPUTED_MOST_DEADLY_BY_ZONE = Deathlog_calculateMostDeadlyByZone(deathlog_data) end
+				precompute_steps[#precompute_steps + 1] = function() deathlog_precomputed.PRECOMPUTED_CAUSE_STATS = Deathlog_calculateCauseStats(deathlog_data) end
+				precompute_steps[#precompute_steps + 1] = function() deathlog_precomputed.PRECOMPUTED_PURGES = Deathlog_calculatePurges(deathlog_data) end
 			end
 
-			DeathlogDataCopy.PRECOMPUTED_GENERAL_STATS = deathlog_precomputed.PRECOMPUTED_GENERAL_STATS
-			DeathlogDataCopy.PRECOMPUTED_LOG_NORMAL_PARAMS = deathlog_precomputed.PRECOMPUTED_LOG_NORMAL_PARAMS
-			DeathlogDataCopy.PRECOMPUTED_LOG_NORMAL_PARAMS_BY_CAUSE = deathlog_precomputed.PRECOMPUTED_LOG_NORMAL_PARAMS_BY_CAUSE
-			DeathlogDataCopy.PRECOMPUTED_KAPLAN_MEIER = deathlog_precomputed.PRECOMPUTED_KAPLAN_MEIER
-			DeathlogDataCopy.PRECOMPUTED_KAPLAN_MEIER_BY_CAUSE = deathlog_precomputed.PRECOMPUTED_KAPLAN_MEIER_BY_CAUSE
-			DeathlogDataCopy.PRECOMPUTED_MOST_DEADLY_BY_ZONE = deathlog_precomputed.PRECOMPUTED_MOST_DEADLY_BY_ZONE
-			DeathlogDataCopy.PRECOMPUTED_CAUSE_STATS = deathlog_precomputed.PRECOMPUTED_CAUSE_STATS
-			DeathlogDataCopy.PRECOMPUTED_PURGES = deathlog_precomputed.PRECOMPUTED_PURGES
+			precompute_steps[#precompute_steps + 1] = function()
+				DeathlogDataCopy.PRECOMPUTED_GENERAL_STATS = deathlog_precomputed.PRECOMPUTED_GENERAL_STATS
+				DeathlogDataCopy.PRECOMPUTED_LOG_NORMAL_PARAMS = deathlog_precomputed.PRECOMPUTED_LOG_NORMAL_PARAMS
+				DeathlogDataCopy.PRECOMPUTED_LOG_NORMAL_PARAMS_BY_CAUSE = deathlog_precomputed.PRECOMPUTED_LOG_NORMAL_PARAMS_BY_CAUSE
+				DeathlogDataCopy.PRECOMPUTED_KAPLAN_MEIER = deathlog_precomputed.PRECOMPUTED_KAPLAN_MEIER
+				DeathlogDataCopy.PRECOMPUTED_KAPLAN_MEIER_BY_CAUSE = deathlog_precomputed.PRECOMPUTED_KAPLAN_MEIER_BY_CAUSE
+				DeathlogDataCopy.PRECOMPUTED_MOST_DEADLY_BY_ZONE = deathlog_precomputed.PRECOMPUTED_MOST_DEADLY_BY_ZONE
+				DeathlogDataCopy.PRECOMPUTED_CAUSE_STATS = deathlog_precomputed.PRECOMPUTED_CAUSE_STATS
+				DeathlogDataCopy.PRECOMPUTED_PURGES = deathlog_precomputed.PRECOMPUTED_PURGES
+			end
 		end
+
 		if DeathNotificationLibDataCopy.HEATMAP_INTENSITY and DeathNotificationLibDataCopy.HEATMAP_INTENSITY_BY_CAUSE and DeathNotificationLibDataCopy.HEATMAP_CREATURE_SUBSET then
 			deathlog_precomputed.HEATMAP_INTENSITY = nil
 			deathlog_precomputed.HEATMAP_INTENSITY_BY_CAUSE = nil
 			deathlog_precomputed.HEATMAP_CREATURE_SUBSET = nil
 		else
 			if not (version == deathlog_precomputed.DNLD_VERSION and deathlog_precomputed.HEATMAP_INTENSITY and deathlog_precomputed.HEATMAP_INTENSITY_BY_CAUSE and deathlog_precomputed.HEATMAP_CREATURE_SUBSET) then
-				local skull_locs = Deathlog_calculateSkullLocs(deathlog_data)
-				deathlog_precomputed.DNLD_VERSION = version
-				deathlog_precomputed.HEATMAP_INTENSITY = Deathlog_calculateHeatmapIntensity(skull_locs)
-				deathlog_precomputed.HEATMAP_INTENSITY_BY_CAUSE = Deathlog_calculateHeatmapIntensityByCause(skull_locs)
-				deathlog_precomputed.HEATMAP_CREATURE_SUBSET = Deathlog_calculateHeatmapCreatureSubset(skull_locs)
+				-- skull_locs is derived once and shared by the three heatmap
+				-- steps; hold it in an upvalue populated by the first step.
+				local heatmap_skull_locs
+				precompute_steps[#precompute_steps + 1] = function()
+					heatmap_skull_locs = Deathlog_calculateSkullLocs(deathlog_data)
+					deathlog_precomputed.DNLD_VERSION = version
+				end
+				precompute_steps[#precompute_steps + 1] = function() deathlog_precomputed.HEATMAP_INTENSITY = Deathlog_calculateHeatmapIntensity(heatmap_skull_locs) end
+				precompute_steps[#precompute_steps + 1] = function() deathlog_precomputed.HEATMAP_INTENSITY_BY_CAUSE = Deathlog_calculateHeatmapIntensityByCause(heatmap_skull_locs) end
+				precompute_steps[#precompute_steps + 1] = function() deathlog_precomputed.HEATMAP_CREATURE_SUBSET = Deathlog_calculateHeatmapCreatureSubset(heatmap_skull_locs) end
 			end
 
-			DeathNotificationLibDataCopy.HEATMAP_INTENSITY = deathlog_precomputed.HEATMAP_INTENSITY
-			DeathNotificationLibDataCopy.HEATMAP_INTENSITY_BY_CAUSE = deathlog_precomputed.HEATMAP_INTENSITY_BY_CAUSE
-			DeathNotificationLibDataCopy.HEATMAP_CREATURE_SUBSET = deathlog_precomputed.HEATMAP_CREATURE_SUBSET
-		end
-		loadWidgets()
-
-		-- Check if we should show changelog popup (version upgrade)
-		if Deathlog_CheckShowChangelog then
-			Deathlog_CheckShowChangelog()
+			precompute_steps[#precompute_steps + 1] = function()
+				DeathNotificationLibDataCopy.HEATMAP_INTENSITY = deathlog_precomputed.HEATMAP_INTENSITY
+				DeathNotificationLibDataCopy.HEATMAP_INTENSITY_BY_CAUSE = deathlog_precomputed.HEATMAP_INTENSITY_BY_CAUSE
+				DeathNotificationLibDataCopy.HEATMAP_CREATURE_SUBSET = deathlog_precomputed.HEATMAP_CREATURE_SUBSET
+			end
 		end
 
-		initEntryCounters()
-		C_Timer.After(2.5, function()
-			Deathlog_CheckCTA()
-			Deathlog_startHunterCleanup()
-			DeathNotificationLib.UpdateDeathAlert()
-		end)
+		local function finalizePrecompute()
+			loadWidgets()
 
-		if not deathlog_sync_options_registered then
-			deathlog_sync_options_registered = true
-			LibStub("AceConfig-3.0"):RegisterOptionsTable("DeathlogSync", sync_options)
-			LibStub("AceConfigDialog-3.0"):AddToBlizOptions("DeathlogSync", "Database Sync", "Deathlog")
+			-- Check if we should show changelog popup (version upgrade)
+			if Deathlog_CheckShowChangelog then
+				Deathlog_CheckShowChangelog()
+			end
+
+			initEntryCounters()
+			C_Timer.After(2.5, function()
+				Deathlog_CheckCTA()
+				Deathlog_startHunterCleanup()
+				DeathNotificationLib.UpdateDeathAlert()
+			end)
+
+			if not deathlog_sync_options_registered then
+				deathlog_sync_options_registered = true
+				LibStub("AceConfig-3.0"):RegisterOptionsTable("DeathlogSync", sync_options)
+				LibStub("AceConfigDialog-3.0"):AddToBlizOptions("DeathlogSync", "Database Sync", "Deathlog")
+			end
+		end
+
+		if #precompute_steps == 0 then
+			-- Cache is valid: run synchronously, no visible startup delay.
+			finalizePrecompute()
+		else
+			-- Run the heavy steps inside a coroutine. Each step's inner loops call
+			-- Deathlog_YieldCheck(), which yields the coroutine every N processed
+			-- entries. The driver resumes the coroutine once per frame via
+			-- C_Timer.After(0, ...), so every chunk of work runs with a fresh
+			-- per-frame script-time budget and no single frame trips the
+			-- "script ran too long" limit — even for a single heavy function.
+			local co = coroutine.create(function()
+				for i = 1, #precompute_steps do
+					precompute_steps[i]()
+				end
+			end)
+
+			local function resumePrecompute()
+				if Deathlog_SetYieldActive then Deathlog_SetYieldActive(true) end
+				local ok, err = coroutine.resume(co)
+				if Deathlog_SetYieldActive then Deathlog_SetYieldActive(false) end
+
+				if not ok then
+					-- A step errored; stop the async run and surface the error, but
+					-- still finalize so widgets/counters initialize (they degrade
+					-- gracefully when a precomputed table is missing). Finalize on a
+					-- fresh frame so widget creation gets a full script budget.
+					geterrorhandler()(err)
+					C_Timer.After(0, finalizePrecompute)
+					return
+				end
+
+				if coroutine.status(co) == "dead" then
+					-- Run finalize (loadWidgets etc.) on its OWN frame rather than
+					-- inline: the frame that just resumed the coroutine already spent
+					-- part of its script budget on the final compute chunk, and
+					-- building the minilog widgets in that same frame could still
+					-- trip the "script ran too long" limit.
+					C_Timer.After(0, finalizePrecompute)
+				else
+					C_Timer.After(0, resumePrecompute)
+				end
+			end
+
+			resumePrecompute()
 		end
 	end
 end

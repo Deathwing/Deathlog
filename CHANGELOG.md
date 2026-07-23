@@ -2,6 +2,12 @@
 
 All notable changes to Deathlog will be documented in this file.
 
+## [0.5.19] - 2026-07-23
+
+### Fixes
+- Fixed more "script ran too long" errors under the tighter script execution limits of Classic Era 1.15.9. The heavy first-login statistics and heatmap precomputation now processes the death log incrementally across multiple frames (yielding partway through the work itself), so even a single very large calculation no longer trips the per-frame limit. A first login, or the first login after an update, with a large death log no longer errors out. This previously required a `/reload` to recover. (Thanks to everyone who reported the login, statistics, and heatmap errors)
+- Fixed a "script ran too long" error when opening `/deathlog` on very large logs. The log now sorts with a single fast pass (a plain date comparator instead of converting dates on every comparison), which stays within the script limit even when sorting the entire database.
+
 ## [0.5.18] - 2026-07-23
 
 ### Fixes

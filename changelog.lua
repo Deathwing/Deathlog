@@ -29,6 +29,12 @@ local NO_CHANGELOG_VERSIONS = {
 local CHANGELOG_CONTENT = [[
 |cFFFFD700Deathlog Changelog|r
 
+|cFF00FF00[0.5.19] - 2026-07-23|r
+
+|cFFFFFFFFFixes|r
+- Fixed more 'script ran too long' errors under Classic Era 1.15.9's tighter script limits. The heavy first-login statistics and heatmap calculations are now spread across several frames, so a first login with a large death log no longer errors out (previously this needed a /reload to recover)
+- Fixed a 'script ran too long' error when opening /deathlog on very large logs; the log now sorts with a single fast pass that stays within the script limit even for the entire database
+
 |cFF00FF00[0.5.17] - 2026-07-22|r
 
 |cFFFFFFFFBug Fixes|r
