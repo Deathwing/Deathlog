@@ -29,6 +29,12 @@ local NO_CHANGELOG_VERSIONS = {
 local CHANGELOG_CONTENT = [[
 |cFFFFD700Deathlog Changelog|r
 
+|cFF00FF00[0.5.20] - 2026-07-23|r
+
+|cFFFFFFFFFixes|r
+- Fixed a 'sort ran for too long' error when opening /deathlog on very large logs that left the log blank. The log is now ordered without a slow per-comparison callback, so the full result set displays with no cap
+- Made the remaining heavy first-login calculations fully incremental so they can no longer trip the script limit on very large logs
+
 |cFF00FF00[0.5.19] - 2026-07-23|r
 
 |cFFFFFFFFFixes|r

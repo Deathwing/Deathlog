@@ -2,6 +2,12 @@
 
 All notable changes to Deathlog will be documented in this file.
 
+## [0.5.20] - 2026-07-23
+
+### Fixes
+- Fixed a "sort ran for too long" error when opening `/deathlog` on very large logs, which left the log tab blank. The log is now ordered by grouping deaths by date and sorting only the (much smaller) set of distinct dates, avoiding the slow per-comparison callback that tripped the sort limit. The full result set is still shown, with no cap.
+- Made the remaining heavy first-login calculations fully incremental so no single step can trip the "script ran too long" limit on very large logs (per-class level distributions and parent-zone heatmap aggregation now yield partway through their work like the other precomputations).
+
 ## [0.5.19] - 2026-07-23
 
 ### Fixes

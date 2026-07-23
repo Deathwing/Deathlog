@@ -6,7 +6,7 @@
 ## X-License: GNU GPL3
 ## X-Category: Leveling,Guild
 ## Category: Hardcore
-## Version: 0.5.19
+## Version: 0.5.20
 ## X-Website: https://github.com/Deathwing/Deathlog
 ## X-Repository: https://github.com/Deathwing/Deathlog
 ## X-Curse-Project-ID: 860689

@@ -784,12 +784,15 @@ local DEATHLOG_TOPN_LINEAR_LIMIT = 200
 -- Sorts by date descending. `limit` is optional:
 --   * small limit  -> newest `limit` entries picked in a linear insertion pass
 --     (no table.sort at all), ideal for the minilog.
---   * large limit  -> full table.sort with a precomputed-date comparator, then
---     truncated to `limit`. O(n log n) regardless of limit.
---   * no limit     -> full table.sort.
--- The date is converted to a number ONCE per entry (into `dates`), so the sort
--- comparator stays a plain table lookup and never re-runs tonumber() per
--- comparison (which is what made the old sort exceed the client's limit).
+--   * large / no limit -> bucket entries by date and sort only the (much
+--     smaller) set of DISTINCT dates.
+--
+-- Why not table.sort(list, comparator)? On very large logs that threw
+-- "sort ran for too long": table.sort has its own time watchdog, and a Lua
+-- closure comparator makes every one of the ~n*log(n) comparisons a slow
+-- Lua->C->Lua call. Sorting the distinct dates instead keeps the sorted set
+-- tiny AND uses table.sort's DEFAULT (C-level) numeric comparator with no Lua
+-- callback, so the watchdog is never hit even for the whole database.
 function DeathlogOrderByFast(_deathlog, limit)
 	local list = {}
 	local dates = {}
@@ -832,25 +835,41 @@ function DeathlogOrderByFast(_deathlog, limit)
 		return top
 	end
 
-	-- Sort descending by date (newest first) using native table.sort.
-	local date_of = {}
+	-- Bucket entries by date, then sort only the distinct dates.
+	local buckets = {}
+	local distinct = {}
+	local distinct_n = 0
 	for i = 1, n do
-		date_of[list[i]] = dates[i]
-	end
-	table.sort(list, function(a, b)
-		return date_of[a] > date_of[b]
-	end)
-
-	-- Truncate to the newest `limit` entries when a (large) limit was requested.
-	if limit and limit > 0 and limit < n then
-		local truncated = {}
-		for i = 1, limit do
-			truncated[i] = list[i]
+		local date = dates[i]
+		local bucket = buckets[date]
+		if bucket == nil then
+			bucket = {}
+			buckets[date] = bucket
+			distinct_n = distinct_n + 1
+			distinct[distinct_n] = date
 		end
-		return truncated
+		bucket[#bucket + 1] = list[i]
 	end
 
-	return list
+	-- Default comparator => C-level numeric sort, no Lua callback per comparison.
+	table.sort(distinct)
+
+	-- Emit entries newest-first by walking the sorted distinct dates in reverse.
+	local ordered = {}
+	local k = 0
+	local cap = (limit and limit > 0 and limit < n) and limit or n
+	for di = distinct_n, 1, -1 do
+		local bucket = buckets[distinct[di]]
+		for j = 1, #bucket do
+			k = k + 1
+			ordered[k] = bucket[j]
+			if k >= cap then
+				return ordered
+			end
+		end
+	end
+
+	return ordered
 end
 
 local function calculateCDF(ln_mean, ln_std_dev)
