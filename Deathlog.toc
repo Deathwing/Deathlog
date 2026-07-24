@@ -11,6 +11,7 @@
 ## X-Repository: https://github.com/Deathwing/Deathlog
 ## X-Curse-Project-ID: 860689
 ## X-Wago-ID: rN4kPAGD
+## X-WoWI-ID: 27170
 # DEATHLOG_UNCOMMENT_NEXT_LINE
 # ## Dependencies: DeathNotificationLib
 # DEATHLOG_UNCOMMENT_NEXT_LINE
