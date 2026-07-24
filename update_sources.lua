@@ -30,6 +30,13 @@ local function compareVersions(left, right)
 	return 0
 end
 
+--- Returns true when `candidate` is a strictly newer version than `current`.
+--- Exposed so other files (e.g. the /dl versions command) can reuse the same
+--- numeric version comparison used for update detection.
+function Deathlog_IsVersionNewer(candidate, current)
+	return compareVersions(candidate, current) > 0
+end
+
 local function createSourceFrame()
 	local frame = CreateFrame("Frame", "DeathlogUpdateSourcesFrame", UIParent, "BackdropTemplate")
 	frame:SetSize(460, 190)
@@ -121,6 +128,13 @@ tryShowPendingUpdate = function()
 		return
 	end
 	if InCombatLockdown() then return end
+	-- Only surface the update popup in rested areas (inns/cities). Popping it up
+	-- mid-world is too intrusive, especially in Hardcore, so defer and retry
+	-- until the player is resting.
+	if not IsResting() then
+		scheduleRetry(5)
+		return
+	end
 	if Deathlog_IsChangelogVisible and Deathlog_IsChangelogVisible() then
 		scheduleRetry(2)
 		return

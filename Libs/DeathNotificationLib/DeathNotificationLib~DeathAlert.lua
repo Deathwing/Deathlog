@@ -506,7 +506,20 @@ function _dnl.playDeathAlert(entry)
 		elseif s["alert_sound"] == "random" then
 			PlayRandomSound(channel)
 		else
-			PlaySoundFile(sounds[s["alert_sound"]], channel)
+			-- Resolve the configured sound. It may be missing (sound removed or
+			-- provided by an LSM addon that isn't loaded), a file path string, or
+			-- a numeric sound kit ID (e.g. LSM's "None" = 1). Guard each case so a
+			-- bad/missing value can't error out of PlaySoundFile.
+			local snd = sounds[s["alert_sound"]]
+			if type(snd) == "number" then
+				PlaySound(snd, channel)
+			elseif type(snd) == "string" and snd ~= "" and snd ~= "random" then
+				PlaySoundFile(snd, channel)
+			elseif snd == nil then
+				-- Unknown sound name: fall back to the default hardcore sound so the
+				-- alert still audibly fires instead of silently doing nothing.
+				PlaySound(8959, channel)
+			end
 		end
 	end
 
@@ -741,8 +754,6 @@ end
 -- Tracks which parent categories already have a DeathAlert panel registered.
 -- Key = parent name, value = AceConfig app name used for that panel.
 local _da_registered_parents = {}
--- True once LSM30 HashTable entries have been merged into the local sounds/fonts tables.
-local _lsm30_tables_populated = LSM30 ~= nil
 
 function _dnl.applyDeathAlertSettings()
 	local settings = _dnl.getDeathAlertOwnerSettings()
@@ -758,36 +769,45 @@ function _dnl.applyDeathAlertSettings()
 	-- Lazy re-lookup: libs may not have been in LibStub yet at file-load time
 	-- (e.g. when the host addon loads them via ADDON_LOADED after DNL loads).
 	LSM30 = LSM30 or (LibStub and LibStub("LibSharedMedia-3.0", true))
-	if LSM30 and not _lsm30_tables_populated then
-		_lsm30_tables_populated = true
+	if LSM30 then
+		-- Re-sync into the SAME table objects that back the option dropdowns
+		-- (values = sounds / fonts) every time settings are applied, so custom
+		-- sounds/fonts registered by a media addon after this first ran still
+		-- show up without a /reload.
 		for k, v in pairs(LSM30:HashTable("sound")) do sounds[k] = v end
 		for k, v in pairs(LSM30:HashTable("font")) do fonts[k] = v end
 	end
 	AceConfig = AceConfig or (LibStub and LibStub("AceConfig-3.0", true))
 	AceConfigDialog = AceConfigDialog or (LibStub and LibStub("AceConfigDialog-3.0", true))
 
-	death_alert_frame:ClearAllPoints()
-	death_alert_frame:SetPoint("CENTER", UIParent, "CENTER", s["pos_x"], s["pos_y"])
-	death_alert_frame:SetSize(s["size_x"], s["size_y"])
+	-- Apply the frame styling in a pcall. If a player's saved settings contain a
+	-- bad value (e.g. an invalid font/style) that makes SetFont or a banner init
+	-- error, we must NOT let that abort the function before the options panel is
+	-- registered below — otherwise the DeathAlert foldout goes missing entirely.
+	pcall(function()
+		death_alert_frame:ClearAllPoints()
+		death_alert_frame:SetPoint("CENTER", UIParent, "CENTER", s["pos_x"], s["pos_y"])
+		death_alert_frame:SetSize(s["size_x"], s["size_y"])
 
-	if s["style"] == "boss_banner_basic_small" then
-		initializeBossBanner(nil, "small")
-	elseif s["style"] == "boss_banner_basic_medium" then
-		initializeBossBanner(nil, "medium")
-	elseif s["style"] == "boss_banner_enemy_icon_small" then
-		initializeBossBanner("enemy_icon", "small")
-	elseif s["style"] == "boss_banner_enemy_icon_medium" then
-		initializeBossBanner("enemy_icon", "medium")
-	elseif s["style"] == "boss_banner_enemy_icon_animated" then
-		initializeBossBanner("enemy_icon", "animated")
-	elseif s["style"] == "lf_animated" then
-		initializeLFBanner("enemy_icon", "animated")
-	elseif s["style"] == "text_only" then
-		initializeBossBanner("enemy_icon", "medium")
-	end
+		if s["style"] == "boss_banner_basic_small" then
+			initializeBossBanner(nil, "small")
+		elseif s["style"] == "boss_banner_basic_medium" then
+			initializeBossBanner(nil, "medium")
+		elseif s["style"] == "boss_banner_enemy_icon_small" then
+			initializeBossBanner("enemy_icon", "small")
+		elseif s["style"] == "boss_banner_enemy_icon_medium" then
+			initializeBossBanner("enemy_icon", "medium")
+		elseif s["style"] == "boss_banner_enemy_icon_animated" then
+			initializeBossBanner("enemy_icon", "animated")
+		elseif s["style"] == "lf_animated" then
+			initializeLFBanner("enemy_icon", "animated")
+		elseif s["style"] == "text_only" then
+			initializeBossBanner("enemy_icon", "medium")
+		end
 
-	death_alert_frame.text:SetFont((fonts[s["font"]] or "Fonts\\NIM_____.ttf"), s["font_size"] * (death_alert_frame.lf_font_scale or 1))
-	death_alert_frame.text:SetTextColor(s["font_color_r"], s["font_color_g"], s["font_color_b"], s["font_color_a"])
+		death_alert_frame.text:SetFont((fonts[s["font"]] or "Fonts\\NIM_____.ttf"), s["font_size"] * (death_alert_frame.lf_font_scale or 1))
+		death_alert_frame.text:SetTextColor(s["font_color_r"], s["font_color_g"], s["font_color_b"], s["font_color_a"])
+	end)
 
 	-- Register AceConfig options panel once per unique parent category.
 	-- Multiple addons embedding DNL each get their own panel under their own parent.

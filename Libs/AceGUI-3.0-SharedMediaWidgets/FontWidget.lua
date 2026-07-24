@@ -8,7 +8,15 @@ local AGSMW = LibStub("AceGUISharedMediaWidgets-1.0")
 
 do
 	local widgetType = "LSM30_Font"
-	local widgetVersion = 13
+	local widgetVersion = 14
+
+	local function SetFontSafely(fontString, font, size, outline)
+		if type(font) ~= "string" or font == "" then
+			return false
+		end
+		local ok, applied = pcall(fontString.SetFont, fontString, font, size, outline)
+		return ok and applied ~= false
+	end
 
 	local contentFrameCache = {}
 	local function ReturnSelf(self)
@@ -94,13 +102,12 @@ do
 		if not text or text == "" or not self.list then
 			return
 		end
-		local font = self.list[text] ~= text and self.list[text] or Media:Fetch('font',text)
-		-- Newer clients (TBC Anniversary 2.5.6+) hard-error on SetFont with an
-		-- empty/nil font path instead of silently ignoring it.
-		if type(font) == "string" and font ~= "" then
-			local _, size, outline = self.frame.text:GetFont()
-			self.frame.text:SetFont(font, size, outline)
+		local font = self.list[text]
+		if type(font) ~= "string" or font == "" or font == text then
+			font = Media:Fetch("font", text)
 		end
+		local _, size, outline = self.frame.text:GetFont()
+		SetFontSafely(self.frame.text, font, size, outline)
 	end
 
 	local function SetLabel(self, text) -- Set the text for the label.
@@ -150,7 +157,7 @@ do
 				local f = GetContentLine()
 				local _, size, outline= f.text:GetFont()
 				local font = self.list[k] ~= k and self.list[k] or Media:Fetch('font',k)
-				f.text:SetFont(font,size,outline)
+				SetFontSafely(f.text, font, size, outline)
 				f.text:SetText(k)
 				if k == self.value then
 					f.check:Show()

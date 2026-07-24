@@ -16,7 +16,7 @@
 ## Category-ruRU: Библиотеки
 ## Category-zhCN: 函数库
 ## Category-zhTW: 函式庫
-## Version: 23
+## Version: 24
 # DEATHLOG_UNCOMMENT_NEXT_LINE
 # ## OptionalDeps: DeathNotificationLibData
 

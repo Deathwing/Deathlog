@@ -2,6 +2,18 @@
 
 All notable changes to Deathlog will be documented in this file.
 
+## [0.5.21] - 2026-07-24
+
+### Fixes
+- Fixed the remaining "Invalid font asset" error when changing minilog columns or presets. Font previews now ignore missing or removed font files instead of aborting the options UI.
+- Fixed the per-feature settings panels (minilog, tooltips, heatmaps, Death Alert, etc.) going missing from the Deathlog options for some players. Each settings panel now loads independently, so one panel failing on a saved value can no longer prevent the others from appearing.
+- Fixed a Lua error when a death alert tried to play a sound that no longer exists (for example a sound removed or provided by a media addon that isn't installed). The alert now falls back to the default sound instead of erroring.
+
+### Improvements
+- Added a `/dl versions` command that prints the versions of Deathlog and its bundled components (DeathNotificationLib and, if installed, the data packages), and notes when a newer version has been seen from other players.
+- Updated the embedded Ace3 (`Release-r1390`), LibSharedMedia (`v12.0.3`), and LibDBIcon (`v12.0.3`) libraries to their latest Classic Era 1.15.9 and TBC 2.5.6-compatible releases.
+- The update-available, changelog, and contribution popups now only appear while you are resting (in an inn or city) instead of anywhere out of combat, so they no longer interrupt you in the open world — important for Hardcore. Custom death-alert sounds registered through LibSharedMedia now also appear in the sound picker without a `/reload`.
+
 ## [0.5.20] - 2026-07-23
 
 ### Fixes

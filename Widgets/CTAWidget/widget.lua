@@ -230,7 +230,15 @@ end
 
 --- Check if the CTA popup should be shown and display it if eligible.
 function Deathlog_CheckCTA()
-	if InCombatLockdown() or deathlog_settings["cta_dismissed"] == true then
+	if deathlog_settings["cta_dismissed"] == true then
+		return
+	end
+
+	-- Only show the contribution popup while resting (inn/city). Showing it out
+	-- in the open world is intrusive, especially in Hardcore, so defer and retry
+	-- until the player is resting.
+	if InCombatLockdown() or not IsResting() then
+		C_Timer.After(5, Deathlog_CheckCTA)
 		return
 	end
 

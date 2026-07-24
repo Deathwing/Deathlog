@@ -29,6 +29,18 @@ local NO_CHANGELOG_VERSIONS = {
 local CHANGELOG_CONTENT = [[
 |cFFFFD700Deathlog Changelog|r
 
+|cFF00FF00[0.5.21] - 2026-07-24|r
+
+|cFFFFFFFFFixes|r
+- Fixed the remaining 'Invalid font asset' error when changing minilog columns or presets; missing font files no longer break the options UI
+- Fixed the per-feature settings panels (minilog, tooltips, heatmaps, Death Alert, etc.) going missing from the options for some players; each panel now loads independently so one failing panel can't hide the rest
+- Fixed a Lua error when a death alert tried to play a sound that no longer exists (e.g. removed, or from a media addon that isn't installed); it now falls back to the default sound
+
+|cFFFFFFFFImprovements|r
+- Added a /dl versions command that prints the versions of Deathlog and its bundled components (DeathNotificationLib, data packages) and notes when a newer version has been seen from other players
+- Updated the embedded UI and media libraries to their latest Classic Era 1.15.9 and TBC 2.5.6-compatible releases
+- The update-available, changelog, and contribution popups now only appear while resting (inn/city) instead of anywhere out of combat, so they no longer interrupt you in the open world (important for Hardcore). Custom LibSharedMedia death-alert sounds now show up in the picker without a /reload
+
 |cFF00FF00[0.5.20] - 2026-07-23|r
 
 |cFFFFFFFFFixes|r
@@ -323,8 +335,17 @@ local function checkShowChangelog()
 	-- 2. User hasn't dismissed the changelog for this version
 	local is_upgrade = (last_version and last_version ~= CURRENT_VERSION) or is_existing_user
 	if is_upgrade and last_changelog_version ~= CURRENT_VERSION and not NO_CHANGELOG_VERSIONS[CURRENT_VERSION] then
-		-- Delay slightly to ensure UI is ready
-		C_Timer.After(3, showChangelog)
+		-- Only show the changelog while resting (inn/city). Showing it out in the
+		-- open world is intrusive, especially in Hardcore, so defer and retry
+		-- until the player is resting.
+		local function showWhenResting()
+			if InCombatLockdown() or not IsResting() then
+				C_Timer.After(5, showWhenResting)
+				return
+			end
+			showChangelog()
+		end
+		C_Timer.After(3, showWhenResting)
 	end
 end
 

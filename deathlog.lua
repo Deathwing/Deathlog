@@ -121,13 +121,27 @@ local function initMinimapButton()
 end
 
 local function loadWidgets()
-	Deathlog_minilog_applySettings(true)
-	Deathlog_CRTWidget_applySettings()
-	Deathlog_CTTWidget_applySettings()
-	Deathlog_HIWidget_applySettings()
-	Deathlog_HWMWidget_applySettings()
-	DeathNotificationLib.UpdateDeathAlert()
-	Deathlog_ReportWidget_ApplySettings()
+	-- Each widget's applySettings registers its own Blizzard settings subcategory
+	-- (the "foldout" panels under Deathlog). Run each in its own pcall so a single
+	-- widget erroring on a player's saved settings (bad font/theme/sound value)
+	-- can't abort the whole chain and leave the remaining foldouts unregistered.
+	local steps = {
+		function() Deathlog_minilog_applySettings(true) end,
+		Deathlog_CRTWidget_applySettings,
+		Deathlog_CTTWidget_applySettings,
+		Deathlog_HIWidget_applySettings,
+		Deathlog_HWMWidget_applySettings,
+		DeathNotificationLib.UpdateDeathAlert,
+		Deathlog_ReportWidget_ApplySettings,
+	}
+	for _, step in ipairs(steps) do
+		if type(step) == "function" then
+			local ok, err = pcall(step)
+			if not ok then
+				print("|cffff5555Deathlog|r: a settings panel failed to load: " .. tostring(err))
+			end
+		end
+	end
 end
 
 --- Initialize entry counters from existing data on first load.
@@ -637,12 +651,65 @@ local function handleEvent(self, event, ...)
 	end
 end
 
+--- Print the versions of Deathlog and its bundled sub-addons/libraries to chat,
+--- noting if a newer Deathlog version has been detected from other players.
+local function printVersions()
+	local function metaVersion(name)
+		return GetAddOnMetadata(name, "Version")
+	end
+	local isLoaded = C_AddOns and C_AddOns.IsAddOnLoaded or IsAddOnLoaded
+
+	-- Print a separately-shipped companion AddOn line. GetAddOnMetadata reads the
+	-- on-disk TOC, so it returns a version even when the AddOn is installed but
+	-- DISABLED (unchecked in the AddOns list) — which is misleading because a
+	-- disabled companion contributes nothing at runtime. So report the loaded
+	-- state: skip when not installed, and mark it (disabled) when installed but
+	-- not loaded.
+	local function printCompanion(label, name)
+		local version = metaVersion(name)
+		if not version then return end -- not installed
+		if isLoaded and isLoaded(name) then
+			DEFAULT_CHAT_FRAME:AddMessage("  " .. label .. ": |cffffffff" .. version .. "|r")
+		else
+			DEFAULT_CHAT_FRAME:AddMessage("  " .. label .. ": |cffffffff" .. version .. "|r |cff999999(installed, disabled)|r")
+		end
+	end
+
+	DEFAULT_CHAT_FRAME:AddMessage("|cffffd200Deathlog versions|r")
+
+	local mainVersion = metaVersion("Deathlog") or "unknown"
+	DEFAULT_CHAT_FRAME:AddMessage("  Deathlog: |cffffffff" .. mainVersion .. "|r")
+
+	-- DeathNotificationLib is a hard runtime dependency (always active via the
+	-- global), so its runtime value is the real one. Prefer its separately-shipped
+	-- TOC version; fall back to the embed revision (embedded dev structure).
+	local dnlVersion = metaVersion("DeathNotificationLib")
+		or (DeathNotificationLib and DeathNotificationLib.VERSION)
+	DEFAULT_CHAT_FRAME:AddMessage("  DeathNotificationLib: |cffffffff" .. tostring(dnlVersion or "unknown") .. "|r")
+
+	-- Optional data companions: only report as active when actually loaded.
+	printCompanion("DeathlogData", "DeathlogData")
+	printCompanion("DeathNotificationLibData", "DeathNotificationLibData")
+
+	-- Note a known newer version, if one has been detected from other players.
+	local detected = deathlog_settings and deathlog_settings["newest_detected_update_version"]
+	if detected and Deathlog_IsVersionNewer and Deathlog_IsVersionNewer(detected, mainVersion) then
+		DEFAULT_CHAT_FRAME:AddMessage("|cffff5555Update available:|r Deathlog |cffffffff" .. tostring(detected)
+			.. "|r has been seen from other players. Type |cffffffff/dl update|r for download sources.")
+	else
+		DEFAULT_CHAT_FRAME:AddMessage("|cff55ff55You're up to date|r as far as Deathlog can tell.")
+	end
+end
+Deathlog_PrintVersions = printVersions
+
 local function SlashHandler(msg, editbox)
 	local command, arg = string.match(string.lower(msg or ""), "^%s*(%S*)%s*(.-)%s*$")
 	command = command or ""
 	arg = arg or ""
 
-	if command == "option" or command == "options" then
+	if command == "version" or command == "versions" then
+		printVersions()
+	elseif command == "option" or command == "options" then
 		Deathlog_OpenSettings()
 	elseif command == "alert" then
 		DeathNotificationLib.TestDeathAlert()

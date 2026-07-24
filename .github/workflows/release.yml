@@ -100,6 +100,27 @@ jobs:
           if [[ -z "$DISCORD_RELEASE_WEBHOOK_URL" ]]; then echo "DISCORD_RELEASE_WEBHOOK_URL not configured; skipping."; exit 0; fi
           node upload.js discord-release
 
+      - name: Persist Discord release state
+        # upload.js records which version+changelog was last announced per package
+        # in release-state/discord-release-state.json so unchanged sub-addons (e.g.
+        # DeathNotificationLib) aren't re-announced every release. The playground
+        # checkout is fresh each run, so commit the updated state back to the
+        # Deathlog-Internal repo (checked out here with write access) to persist it.
+        if: steps.discord.outcome == 'success'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          state_file="release-state/discord-release-state.json"
+          if [[ -z "$(git status --porcelain "$state_file")" ]]; then
+            echo "Discord release state unchanged; nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$state_file"
+          git commit -m "chore: update Discord release state for ${GITHUB_REF_NAME}"
+          git push origin HEAD:main
+
       - name: Verify platform uploads
         if: always()
         env:

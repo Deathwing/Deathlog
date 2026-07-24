@@ -1,5 +1,11 @@
 # Changelog
 
+## V24 — 2026-07-24
+
+### Bug Fixes
+- Fixed a Lua error (`Usage: PlaySoundFile(...)`) when firing a death alert whose configured `alert_sound` no longer resolves to a valid sound — e.g. a sound removed or provided by a LibSharedMedia addon that isn't loaded. Sounds are now resolved safely: numeric sound-kit IDs play through `PlaySound`, file paths through `PlaySoundFile`, and an unknown name falls back to the default hardcore sound instead of erroring
+- The Death Alert settings panel now registers even if a player's saved styling values (font/style) would otherwise error while applying them — the frame styling is applied defensively so it can no longer prevent the Death Alert options foldout from appearing
+
 ## V23 — 2026-07-23
 
 ### Bug Fixes
