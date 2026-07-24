@@ -3,6 +3,9 @@
 ## Notes: Precomputed heatmap data for DeathNotificationLib.
 ## IconTexture: Interface\AddOns\DeathNotificationLibData\Media\logo.png
 ## Author: Deathwing
+## X-Website: https://github.com/Deathwing/Deathlog
+## X-Repository: https://github.com/Deathwing/Deathlog
+## X-Curse-Project-ID: 1483065
 ## X-License: GNU GPL3
 ## X-Category: Library
 ## Category-enUS: Libraries

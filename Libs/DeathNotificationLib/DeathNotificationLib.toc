@@ -3,6 +3,9 @@
 ## Notes: Death notification and tracking library for Hardcore WoW.
 ## IconTexture: Interface\AddOns\DeathNotificationLib\Media\logo.png
 ## Author: Deathwing
+## X-Website: https://github.com/Deathwing/Deathlog
+## X-Repository: https://github.com/Deathwing/Deathlog
+## X-Curse-Project-ID: 1468723
 ## X-License: GNU GPL3
 ## X-Category: Library
 ## Category-enUS: Libraries
