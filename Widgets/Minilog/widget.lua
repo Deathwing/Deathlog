@@ -123,7 +123,11 @@ local widget_name = "minilog"
 
 local fonts = LSM30:HashTable("font")
 fonts["default_font"] = default_font
-local font_base_path = "Interface\\AddOns\\DeathNotificationLib\\Fonts\\"
+-- These fonts ship with DeathNotificationLib, which may live either as its own
+-- top-level AddOn (the released/split layout) or embedded under Deathlog\Libs\
+-- (the development layout). DNL auto-detects its own location at load time and
+-- publishes it as MEDIA_PATH, so never hardcode the path here.
+local font_base_path = DeathNotificationLib.MEDIA_PATH .. "Fonts\\"
 fonts["BreatheFire"] = font_base_path .. "BreatheFire.ttf"
 fonts["BlackChancery"] = font_base_path .. "BLKCHCRY.TTF"
 fonts["ArgosGeorge"] = font_base_path .. "ArgosGeorge.ttf"
@@ -419,7 +423,16 @@ local function setSubtitleData()
 		return
 	end
 	for _, k in ipairs(deathlog_settings[widget_name]["columns"]) do
-		subtitle_data[#subtitle_data + 1] = subtitle_metadata[k]
+		local meta = subtitle_metadata[k]
+		-- Identify each column by its *slot position*, not by its type or its display
+		-- label. Neither of those is unique: the same column type may be selected in
+		-- several slots (e.g. Name twice), and different types can share a label
+		-- (both "Name" and "ColoredName" display as "Name"). Keying by anything but
+		-- position makes two slots share one fontstring, so a column renders blank.
+		if meta then
+			local slot = #subtitle_data + 1
+			subtitle_data[slot] = { meta[1], meta[2], meta[3], key = slot, column_type = k }
+		end
 	end
 	death_log_frame:SetSubTitle(subtitle_data)
 
@@ -447,6 +460,57 @@ local loaded = false
 local current_entry_font_path = default_font
 local current_entry_font_size = 14
 local current_entry_font_flags = ""
+
+-- (Re)create and position the per-column fontstrings of a single row entry to
+-- match the current `subtitle_data`. Called both when rows are first built and
+-- whenever the user changes the column selection, since the set of columns (and
+-- therefore the set of required fontstrings) can change at any time.
+-- Fontstrings are keyed by column *slot* (`v.key`), never by column type or
+-- display label: the same type may occupy several slots at once, and different
+-- types can share a label, so any other key would make two columns collide.
+local function layoutEntryFontStrings(_entry)
+	if _entry == nil or _entry.font_strings == nil then
+		return
+	end
+
+	-- Retire fontstrings for columns that are no longer shown. They cannot be
+	-- destroyed in WoW, so blank and hide them and drop the reference.
+	local in_use = {}
+	for _, v in ipairs(subtitle_data) do
+		in_use[v.key] = true
+	end
+	for key, fs in pairs(_entry.font_strings) do
+		if not in_use[key] then
+			fs:SetText("")
+			fs:Hide()
+			_entry.font_strings[key] = nil
+		end
+	end
+
+	local current_column_offset = 15
+	for idx, v in ipairs(subtitle_data) do
+		local fs = _entry.font_strings[v.key]
+		if fs == nil then
+			fs = _entry.frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+			_entry.font_strings[v.key] = fs
+			Deathlog_SetFontWithFallback(fs, Deathlog_L.mini_log_font, 14, "")
+		end
+		fs:Show()
+		fs:ClearAllPoints()
+		fs:SetPoint("LEFT", _entry.frame, "LEFT", current_column_offset, 0)
+		fs:SetWordWrap(false)
+		fs:SetJustifyH("LEFT")
+		-- The last column is left unconstrained so long values aren't truncated.
+		if idx + 1 <= #subtitle_data then
+			fs:SetWidth(v[2])
+		else
+			fs:SetWidth(0)
+		end
+		fs:SetTextColor(1, 1, 1)
+		current_column_offset = current_column_offset + v[2]
+	end
+end
+
 local function setupRowEntries()
 	loaded = true
 	row_entry = {}
@@ -559,21 +623,7 @@ local function setupRowEntries()
 		local _entry = row_entry[idx]
 		_entry:SetHighlight("Interface\\Glues\\CharacterSelect\\Glues-CharacterSelect-Highlight")
 		_entry.font_strings = {}
-		local next_x = 0
-		local current_column_offset = 15
-		for idx, v in ipairs(subtitle_data) do
-			_entry.font_strings[v[1]] = _entry.frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-			_entry.font_strings[v[1]]:SetPoint("LEFT", _entry.frame, "LEFT", current_column_offset, 0)
-			_entry.font_strings[v[1]]:SetWordWrap(false)
-			current_column_offset = current_column_offset + v[2]
-			_entry.font_strings[v[1]]:SetJustifyH("LEFT")
-
-			if idx + 1 <= #subtitle_data then
-				_entry.font_strings[v[1]]:SetWidth(v[2])
-			end
-			_entry.font_strings[v[1]]:SetTextColor(1, 1, 1)
-			Deathlog_SetFontWithFallback(_entry.font_strings[v[1]], Deathlog_L.mini_log_font, 14, "")
-		end
+		layoutEntryFontStrings(_entry)
 
 		_entry.background = _entry.frame:CreateTexture(nil, "OVERLAY")
 		_entry.background:SetPoint("CENTER", _entry.frame, "CENTER", 0, 0)
@@ -659,10 +709,12 @@ end
 local function setEntry(player_data, _entry)
 	_entry.player_data = player_data
 	for _, v in ipairs(subtitle_data) do
-		local fs = _entry.font_strings[v[1]]
-		local text = v[3](_entry)
-		fs:SetText(text)
-		Deathlog_ApplyFontForText(fs, text, current_entry_font_path, current_entry_font_size, current_entry_font_flags)
+		local fs = _entry.font_strings[v.key]
+		if fs then
+			local text = v[3](_entry)
+			fs:SetText(text)
+			Deathlog_ApplyFontForText(fs, text, current_entry_font_path, current_entry_font_size, current_entry_font_flags)
+		end
 	end
 end
 
@@ -913,16 +965,22 @@ local function applyFont()
 	current_entry_font_size = entry_font_size
 	current_entry_font_flags = ""
 	for i = 1, 20 do
-		for idx, v in ipairs(subtitle_data) do
-			local fs = row_entry[i].font_strings[v[1]]
-			local text = fs:GetText()
-			local applied_entry_font = Deathlog_ApplyFontForText(fs, text, entry_font_path, entry_font_size, "")
+		local entry = row_entry[i]
+		if entry and entry.font_strings then
+			for _, v in ipairs(subtitle_data) do
+				local fs = entry.font_strings[v.key]
+				if fs then
+					local text = fs:GetText()
+					local applied_entry_font =
+						Deathlog_ApplyFontForText(fs, text, entry_font_path, entry_font_size, "")
 
-			-- Verify the actually-applied font (Cyrillic swap or load-failure
-			-- fallback included) matches what the fontstring reports, so the retry
-			-- ticker can terminate.
-			if applied_entry_font ~= fs:GetFont() then
-				success = false
+					-- Verify the actually-applied font (Cyrillic swap or load-failure
+					-- fallback included) matches what the fontstring reports, so the retry
+					-- ticker can terminate.
+					if applied_entry_font ~= fs:GetFont() then
+						success = false
+					end
+				end
 			end
 		end
 	end
@@ -939,6 +997,12 @@ function Deathlog_minilog_applySettings(rebuild_ace)
 		setSubtitleData()
 		if loaded == false then
 			setupRowEntries()
+		else
+			-- Rows already exist: re-lay out their fontstrings so newly selected
+			-- columns get one and removed columns are hidden.
+			for _, _entry in pairs(row_entry) do
+				layoutEntryFontStrings(_entry)
+			end
 		end
 	end
 	applyFont()

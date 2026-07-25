@@ -1,7 +1,7 @@
 --[[-----------------------------------------------------------------------------
 Deathlog Container
 -------------------------------------------------------------------------------]]
-local Type, Version = "Deathlog", 30
+local Type, Version = "Deathlog", 32
 local AceGUI = LibStub and LibStub("AceGUI-3.0", true)
 if not AceGUI or (AceGUI:GetWidgetVersion(Type) or 0) >= Version then
 	return
@@ -129,9 +129,30 @@ local methods = {
 		if subtitle_data == nil then
 			return
 		end
-		for _, v in ipairs(subtitle_data) do
-			self.subtitletext_tbl[v[1]]:SetText(v[1])
-			self.subtitletext_tbl[v[1]]:SetPoint("LEFT", self.frame, "TOPLEFT", column_offset, -26)
+
+		-- Clear every heading first, so columns that are no longer shown don't leave
+		-- a stale label behind at an old offset.
+		for _, fs in pairs(self.subtitletext_tbl) do
+			fs:SetText("")
+		end
+
+		-- Headings are addressed by column slot (`v.key`), never by column type or
+		-- display label: the same type can occupy several slots at once and different
+		-- types can share a label (both "Name" and "ColoredName" display as "Name"),
+		-- so any other key makes two columns share one fontstring and one goes blank.
+		for slot, v in ipairs(subtitle_data) do
+			local header = self.subtitletext_tbl[v.key or slot]
+			if header then
+				local ctype = v.column_type
+				-- Icon columns are self-explanatory, so they get no heading text.
+				if ctype == "ClassLogo1" or ctype == "ClassLogo2" or ctype == "RaceLogoSquare" then
+					header:SetText("")
+				else
+					header:SetText(v[1])
+				end
+				header:SetPoint("LEFT", self.frame, "TOPLEFT", column_offset, -26)
+			end
+			-- Advance regardless, so an unknown column still shifts the ones after it.
 			column_offset = column_offset + v[2]
 		end
 	end,
@@ -281,13 +302,15 @@ local function Constructor()
 	titletext:SetFont(main_font, 13, "")
 	titletext:SetPoint("LEFT", frame, "TOPLEFT", 25, -10)
 
-	local column_types = { "Name", "Guild", "Lvl", "F's", "Race", "Class" }
+	-- One heading fontstring per column *slot*, so the same column type can be
+	-- selected in several slots at once without them sharing a fontstring.
+	local MAX_COLUMNS = 10
 	local subtitletext_tbl = {}
-	for _, v in ipairs(column_types) do
-		subtitletext_tbl[v] = title:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-		subtitletext_tbl[v]:SetPoint("LEFT", frame, "TOPLEFT", 17, -26)
-		subtitletext_tbl[v]:SetFont(main_font, 12, "")
-		subtitletext_tbl[v]:SetTextColor(0.5, 0.5, 0.5)
+	for slot = 1, MAX_COLUMNS do
+		subtitletext_tbl[slot] = title:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+		subtitletext_tbl[slot]:SetPoint("LEFT", frame, "TOPLEFT", 17, -26)
+		subtitletext_tbl[slot]:SetFont(main_font, 12, "")
+		subtitletext_tbl[slot]:SetTextColor(0.5, 0.5, 0.5)
 	end
 
 	local titlebg_l = frame:CreateTexture(nil, "OVERLAY")

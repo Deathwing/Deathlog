@@ -29,6 +29,13 @@ local NO_CHANGELOG_VERSIONS = {
 local CHANGELOG_CONTENT = [[
 |cFFFFD700Deathlog Changelog|r
 
+|cFF00FF00[0.5.22] - 2026-07-25|r
+
+|cFFFFFFFFFixes|r
+- Fixed the extra mini log fonts (BreatheFire, Black Chancery, Immortal, etc.) not loading. They ship with DeathNotificationLib, which is installed as its own addon rather than inside Deathlog, so the old hardcoded path pointed at a folder that doesn't exist. The path is now resolved from DeathNotificationLib itself (thanks @karaktaka)
+- Fixed an error when changing a mini log column to Playtime, Guild, Last Words, Class Logo or Race Logo, or when switching to the Concise or Yazpad preset. The mini log went blank, and after a reload it reset to the middle of the screen, couldn't be dragged, and vanished from the addon settings (thanks flames57)
+- Fixed mini log columns rendering blank when the same column is picked in more than one slot, or when two columns share a heading (such as Name together with Coloured Name). Every column slot is now independent
+
 |cFF00FF00[0.5.21] - 2026-07-24|r
 
 |cFFFFFFFFFixes|r

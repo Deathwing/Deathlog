@@ -1,7 +1,7 @@
 --[[-----------------------------------------------------------------------------
 Deathlog Container
 -------------------------------------------------------------------------------]]
-local Type, Version = "Deathlog_MiniLog", 31
+local Type, Version = "Deathlog_MiniLog", 33
 local AceGUI = LibStub and LibStub("AceGUI-3.0", true)
 if not AceGUI or (AceGUI:GetWidgetVersion(Type) or 0) >= Version then
 	return
@@ -16,22 +16,11 @@ local wipe = table.wipe
 -- WoW APIs
 local PlaySound = PlaySound
 local CreateFrame, UIParent = CreateFrame, UIParent
-local column_types = {
-	"Name",
-	"Guild",
-	"Lvl",
-	"F's",
-	"Race",
-	"Class",
-	"Source",
-	"ColoredName",
-	"Zone",
-	"ClassLogo1",
-	"ClassLogo2",
-	"RaceLogoSquare",
-	"Playtime",
-	"LastWords",
-}
+
+-- Header fontstrings are created per column *slot*, not per column type, because
+-- the same type may be chosen in several slots at once (e.g. Name twice). This is
+-- the number of slots the options panel offers, plus headroom.
+local MAX_COLUMNS = 10
 
 --[[-----------------------------------------------------------------------------
 Scripts
@@ -143,28 +132,33 @@ local methods = {
 		end
 
 		--clear
-		for _, v in ipairs(column_types) do
-			self.subtitletext_tbl[v]:SetText("")
+		for _, fs in pairs(self.subtitletext_tbl) do
+			fs:SetText("")
 		end
-		for _, v in ipairs(subtitle_data) do
-			if self.subtitletext_tbl[v[1]] == nil then
-				column_offset = column_offset + v[2]
-			elseif v[1] == "ClassLogo1" or v[1] == "ClassLogo2" or v[1] == "RaceLogoSquare" then
-				self.subtitletext_tbl[v[1]]:SetText("")
-				self.subtitletext_tbl[v[1]]:SetPoint("LEFT", self.frame, "TOPLEFT", column_offset, -26)
-				column_offset = column_offset + v[2]
-			else
-				self.subtitletext_tbl[v[1]]:SetText(v[1])
-				self.subtitletext_tbl[v[1]]:SetPoint("LEFT", self.frame, "TOPLEFT", column_offset, -26)
-				column_offset = column_offset + v[2]
+		-- Headers are addressed by column slot (`v.key`), never by column type or
+		-- display label: the same type can occupy several slots and different types
+		-- can share a label, so any other key makes two columns share one fontstring.
+		for slot, v in ipairs(subtitle_data) do
+			local header = self.subtitletext_tbl[v.key or slot]
+			if header then
+				local ctype = v.column_type
+				-- Icon columns are self-explanatory, so they get no heading text.
+				if ctype == "ClassLogo1" or ctype == "ClassLogo2" or ctype == "RaceLogoSquare" then
+					header:SetText("")
+				else
+					header:SetText(v[1])
+				end
+				header:SetPoint("LEFT", self.frame, "TOPLEFT", column_offset, -26)
 			end
+			column_offset = column_offset + v[2]
 		end
 	end,
 	["SetSubTitleOffset"] = function(self, _x, _y, subtitle_data)
 		local column_offset = 17
-		for _, v in ipairs(subtitle_data) do
-			if self.subtitletext_tbl[v[1]] then
-				self.subtitletext_tbl[v[1]]:SetPoint("LEFT", self.frame, "TOPLEFT", column_offset + _x, -26 + _y)
+		for slot, v in ipairs(subtitle_data) do
+			local header = self.subtitletext_tbl[v.key or slot]
+			if header then
+				header:SetPoint("LEFT", self.frame, "TOPLEFT", column_offset + _x, -26 + _y)
 			end
 			column_offset = column_offset + v[2]
 		end
@@ -314,12 +308,12 @@ local function Constructor()
 	titletext:SetPoint("LEFT", frame, "TOPLEFT", 32, -10)
 
 	local subtitletext_tbl = {}
-	for _, v in ipairs(column_types) do
-		subtitletext_tbl[v] = title:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-		subtitletext_tbl[v]:SetPoint("LEFT", frame, "TOPLEFT", 20, -26)
-		subtitletext_tbl[v]:SetFont(main_font, 12, "")
-		subtitletext_tbl[v]:SetTextColor(0.5, 0.5, 0.5)
-		subtitletext_tbl[v]:SetWordWrap(false)
+	for slot = 1, MAX_COLUMNS do
+		subtitletext_tbl[slot] = title:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+		subtitletext_tbl[slot]:SetPoint("LEFT", frame, "TOPLEFT", 20, -26)
+		subtitletext_tbl[slot]:SetFont(main_font, 12, "")
+		subtitletext_tbl[slot]:SetTextColor(0.5, 0.5, 0.5)
+		subtitletext_tbl[slot]:SetWordWrap(false)
 	end
 
 	local titlebg_l = frame:CreateTexture(nil, "OVERLAY")

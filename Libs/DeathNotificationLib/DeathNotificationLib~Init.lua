@@ -2,7 +2,7 @@
 DeathNotificationLib~Init.lua
 --]]
 
-local VERSION = 24
+local VERSION = 25
 
 if DeathNotificationLib and (DeathNotificationLib.VERSION or 0) >= VERSION then return end
 
@@ -28,6 +28,12 @@ do
 	--- Example: "Interface\\AddOns\\DeathNotificationLib\\"
 	---@type string
 	_dnl.media_path = dir
+	--- Public mirror of the auto-detected base path so embedding addons can build
+	--- media references (fonts, sounds, textures) that resolve correctly whether
+	--- DNL is installed as its own AddOn or embedded under <Addon>\Libs\.
+	--- `Internal` is stripped by the Finalizer, so consumers must use this.
+	---@type string
+	DeathNotificationLib.MEDIA_PATH = dir
 end
 
 _dnl.L = {

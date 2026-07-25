@@ -1,5 +1,10 @@
 # Changelog
 
+## V25 — 2026-07-25
+
+### Improvements
+- Added a public `DeathNotificationLib.MEDIA_PATH` field holding the auto-detected base path to the library folder. Embedding addons can use it to build font/sound/texture references that resolve whether the library is installed as its own addon or embedded under `<Addon>\Libs\`. Previously this was only available as `Internal.media_path`, which is stripped when the library finishes loading.
+
 ## V24 — 2026-07-24
 
 ### Bug Fixes
