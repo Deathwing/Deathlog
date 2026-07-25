@@ -16,8 +16,10 @@ jobs:
     env:
       CF_UPLOAD_TOKEN: ${{ secrets.CF_UPLOAD_TOKEN }}
       WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
+      WOWI_API_TOKEN: ${{ secrets.WOWI_API_TOKEN }}
       DISCORD_RELEASE_WEBHOOK_URL: ${{ secrets.DISCORD_RELEASE_WEBHOOK_URL }}
       WAGO_PROJECT_ID: rN4kPAGD
+      WOWI_ADDON_ID: '27170'
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout tagged addon
@@ -93,6 +95,13 @@ jobs:
           if [[ -z "$WAGO_API_TOKEN" ]]; then echo "WAGO_API_TOKEN not configured; skipping."; exit 0; fi
           node publish-wago.js --project-id "$WAGO_PROJECT_ID" --zip dist/Deathlog_Bundled.zip --toc ../Deathlog.toc --label "$GITHUB_REF_NAME" --changelog ../CHANGELOG.md
 
+      - name: Publish bundled package to WoWInterface
+        id: wowinterface
+        continue-on-error: true
+        run: |
+          if [[ -z "$WOWI_API_TOKEN" ]]; then echo "WOWI_API_TOKEN not configured; skipping."; exit 0; fi
+          node publish-wowi.js --addon-id "$WOWI_ADDON_ID" --zip dist/Deathlog_Bundled.zip --toc ../Deathlog.toc --version "$GITHUB_REF_NAME" --changelog dist/release-notes.md
+
       - name: Notify Discord
         id: discord
         continue-on-error: true
@@ -126,6 +135,7 @@ jobs:
         env:
           CF_OUTCOME: ${{ steps.curseforge.outcome }}
           WAGO_OUTCOME: ${{ steps.wago.outcome }}
+          WOWI_OUTCOME: ${{ steps.wowinterface.outcome }}
           DISCORD_OUTCOME: ${{ steps.discord.outcome }}
         run: |
-          [[ "$CF_OUTCOME" != failure && "$WAGO_OUTCOME" != failure && "$DISCORD_OUTCOME" != failure ]] || exit 1
+          [[ "$CF_OUTCOME" != failure && "$WAGO_OUTCOME" != failure && "$WOWI_OUTCOME" != failure && "$DISCORD_OUTCOME" != failure ]] || exit 1

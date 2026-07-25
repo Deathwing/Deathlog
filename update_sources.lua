@@ -2,6 +2,7 @@ local SOURCES = {
 	{ name = "GitHub", url = "https://github.com/Deathwing/Deathlog/releases/latest" },
 	{ name = "CurseForge", url = "https://www.curseforge.com/wow/addons/deathlog" },
 	{ name = "Wago", url = "https://addons.wago.io/addons/deathlog" },
+	{ name = "WoWInterface", url = "https://www.wowinterface.com/downloads/info27170-Deathlog.html" },
 }
 
 local warnedVersions = {}
