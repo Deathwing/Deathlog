@@ -25,7 +25,7 @@ do
 	-- require paths rooted at "Interface\\" not the full disk path.
 	dir = dir:gsub("^.*(Interface\\)", "%1")
 	--- Base Interface path to this DeathNotificationLib folder (trailing backslash).
-	--- Example: "Interface\\AddOns\\Deathlog\\Libs\\DeathNotificationLib\\"
+	--- Example: "Interface\\AddOns\\DeathNotificationLib\\"
 	---@type string
 	_dnl.media_path = dir
 end

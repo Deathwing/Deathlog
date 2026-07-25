@@ -123,7 +123,7 @@ local widget_name = "minilog"
 
 local fonts = LSM30:HashTable("font")
 fonts["default_font"] = default_font
-local font_base_path = "Interface\\AddOns\\Deathlog\\Libs\\DeathNotificationLib\\Fonts\\"
+local font_base_path = "Interface\\AddOns\\DeathNotificationLib\\Fonts\\"
 fonts["BreatheFire"] = font_base_path .. "BreatheFire.ttf"
 fonts["BlackChancery"] = font_base_path .. "BLKCHCRY.TTF"
 fonts["ArgosGeorge"] = font_base_path .. "ArgosGeorge.ttf"
