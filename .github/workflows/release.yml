@@ -65,8 +65,6 @@ jobs:
       - name: Create checksums and release notes
         run: |
           set -euo pipefail
-          # DeathlogCompanion is not published yet; keep it out of the release.
-          rm -f dist/DeathlogCompanion.zip
           (cd dist && sha256sum *.zip > SHA256SUMS)
           awk 'BEGIN { found=0 } /^## / { if (found) exit; found=1 } found' ../CHANGELOG.md > dist/release-notes.md
           test -s dist/release-notes.md || cp ../CHANGELOG.md dist/release-notes.md
