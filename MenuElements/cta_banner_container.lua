@@ -1,5 +1,5 @@
 --[[
-Copyright 2026 Yazpad & Deathwing
+Copyright 2026 Deathwing
 The Deathlog AddOn is distributed under the terms of the GNU General Public License (or the Lesser GPL).
 This file is part of Deathlog.
 
@@ -65,10 +65,10 @@ discord_server_btn:SetScript("OnClick", function()
 			cta_banner_container.discord_server_editbox:SetSize(220, 20)
 			cta_banner_container.discord_server_editbox:SetPoint("BOTTOM", discord_server_btn, "TOP", 0, 2)
 			cta_banner_container.discord_server_editbox:SetAutoFocus(false)
-			cta_banner_container.discord_server_editbox:SetText("discord.com/invite/NphuAv75vy")
+			cta_banner_container.discord_server_editbox:SetText("discord.gg/TrJFGcah7z")
 			cta_banner_container.discord_server_editbox:SetScript("OnEditFocusGained", function(self) self:HighlightText() end)
 			cta_banner_container.discord_server_editbox:SetScript("OnEscapePressed", function(self) self:ClearFocus(); self:Hide() end)
-			cta_banner_container.discord_server_editbox:SetScript("OnChar", function(self) self:SetText("discord.com/invite/NphuAv75vy"); self:HighlightText() end)
+			cta_banner_container.discord_server_editbox:SetScript("OnChar", function(self) self:SetText("discord.gg/TrJFGcah7z"); self:HighlightText() end)
 		end
 		cta_banner_container.discord_server_editbox:Show()
 		cta_banner_container.discord_server_editbox:SetFocus()

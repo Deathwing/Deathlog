@@ -19,7 +19,7 @@ See [CHANGELOG.md](https://github.com/Deathwing/Deathlog/blob/master/CHANGELOG.m
 
 ## Contact & Feedback
 
-- Deathlog Discord: http://discord.com/invite/NphuAv75vy
+- Deathlog Discord: https://discord.gg/TrJFGcah7z
 
 ## Features
 
@@ -31,7 +31,7 @@ See [CHANGELOG.md](https://github.com/Deathwing/Deathlog/blob/master/CHANGELOG.m
 
 ### Death Alerts
 * 6 visual themes with NPC creature portraits (static + animated 3D models)
-* Customize messages with substitution tags: `<name>`, `<race>`, `<class>`, `<level>`, `<guild>`, `<source>`, `<zone>`, `<playtime>`, `<last_words>`
+* Customize messages with substitution tags: `<name>`, `<race>`, `<class>`, `<level>`, `<guild>`, `<source>`, `<zone>`, `<playtime>`, `<last_words>`, `<reported_by>`
 * **Group syntax** for context-aware messages:
   * `(...)` Relaxed group — shown if at least one tag inside has a value
   * `[...]` Strict group — shown only if **all** tags inside have values
@@ -59,6 +59,13 @@ See [CHANGELOG.md](https://github.com/Deathwing/Deathlog/blob/master/CHANGELOG.m
 * Filter by server, level range, and class
 
 ![Deathlog](https://raw.githubusercontent.com/Deathwing/Deathlog/master/git_images/deathlog_deathlog.png)
+
+### Local Moderation
+* Right-click any death (log or minilog) to **Report player** via Blizzard's in-game report dialog; offensive names/guilds are flagged in red as **Report name**
+* **Hide name** removes every entry for a character from your log and stops your client from sharing them — purely local, never deletes anyone else's data, and reversible with `/dl unhide <name>` (`/dl hidden` lists what you've hidden)
+* For deaths a peer broadcast to you, **Report sender** or **Ignore sender** (ignoring drops all their future live broadcasts)
+* **Reported by** attribution shows who relayed a death — a minilog column, a tooltip row, the `<reported_by>` death-alert tag, and a trailing `*` after the name in the search window
+* Fake-death floods (junk names, impossible sources) are rejected on arrival, and each sender is volume-capped so no one can flood your log
 
 ### Statistics per Zone
 * Fully functional map with heatmap overlay and death location overlays
@@ -109,3 +116,12 @@ See [CHANGELOG.md](https://github.com/Deathwing/Deathlog/blob/master/CHANGELOG.m
 
 ### Preprocessed Collection
 * Large database of death entries used for statistics (separate databases for Classic Era and TBC Anniversary)
+
+## Credits & License
+
+Deathlog was originally created by **Yazpad** (aaronma37), who authored and maintained it from 2023 until early 2025. This repository is a maintained fork by **Deathwing**, continuing development since then.
+
+Licensed under the [GNU GPL v3](LICENSE).
+
+- Copyright 2023-2025 Yazpad (Aaron Ma) — original author
+- Copyright 2023-2026 Deathwing — current author

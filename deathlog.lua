@@ -1,5 +1,6 @@
 --[[
-Copyright 2026 Yazpad & Deathwing
+Copyright 2023-2025 Yazpad (Aaron Ma) - original author
+Copyright 2023-2026 Deathwing - current author
 The Deathlog AddOn is distributed under the terms of the GNU General Public License (or the Lesser GPL).
 This file is part of Deathlog.
 
@@ -40,6 +41,9 @@ local function initVariables()
 	deathlog_record_econ_stats = deathlog_record_econ_stats or {}
 	deathlog_entry_counts = deathlog_entry_counts or {}
 	deathlog_purged = deathlog_purged or {}
+	deathlog_entry_origin = deathlog_entry_origin or {}
+	deathlog_ignored_senders = deathlog_ignored_senders or {}
+	deathlog_hidden_names = deathlog_hidden_names or {}
 	deathlog_precomputed = deathlog_precomputed or {}
 	deathlog_dev_data = deathlog_dev_data or {}
 	deathlog_char_data = deathlog_char_data or {}
@@ -77,6 +81,35 @@ local function handleMiniLogCommand(arg)
 		setMiniLogShown(false)
 	else
 		toggleMiniLog()
+	end
+end
+
+--- Hidden names are only reachable from the log's context menu while an entry
+--- is visible, and hiding removes the entry — so unhiding needs a command.
+local function handleHiddenCommand(command, name)
+	if command == "unhide" then
+		if name == "" then
+			DEFAULT_CHAT_FRAME:AddMessage("|cffffd200Deathlog:|r usage: |cffffffff/dl unhide <name>|r")
+			return
+		end
+		if not Deathlog_isNameHidden(name) then
+			DEFAULT_CHAT_FRAME:AddMessage("|cffffd200Deathlog:|r |cffffffff" .. name .. "|r is not hidden.")
+			return
+		end
+		Deathlog_unhideName(name)
+		DEFAULT_CHAT_FRAME:AddMessage("|cffffd200Deathlog:|r unhid |cffffffff" .. name
+			.. "|r. Past entries return only if a peer re-syncs them.")
+		return
+	end
+
+	local names = Deathlog_getHiddenNames()
+	if #names == 0 then
+		DEFAULT_CHAT_FRAME:AddMessage("|cffffd200Deathlog:|r no hidden names.")
+		return
+	end
+	DEFAULT_CHAT_FRAME:AddMessage("|cffffd200Deathlog hidden names|r (|cffffffff/dl unhide <name>|r)")
+	for _, n in ipairs(names) do
+		DEFAULT_CHAT_FRAME:AddMessage("  |cffff4040" .. n .. "|r")
 	end
 end
 
@@ -241,6 +274,10 @@ local function deathlog_isFilteredEntry(player_data)
 	local realm = GetRealmName()
 	local cs = DeathNotificationLib.Fletcher16(player_data)
 
+	if deathlog_hidden_names[player_data["name"]] then
+		return true
+	end
+
 	if deathlog_purged[realm] and deathlog_purged[realm][cs] then
 		return true
 	end
@@ -284,6 +321,16 @@ local function newEntry(_player_data, _checksum, num_peer_checks, in_guild, sour
 	-- Reject entries that should be filtered
 	if deathlog_isFilteredEntry(_player_data) then return end
 
+	-- Drop live broadcasts from senders the user muted. Sync entries have no
+	-- trustworthy sender, so they are never matched against this list. Match on
+	-- the unforgeable chat GUID first, falling back to name.
+	if _checksum and DeathNotificationLib.GetEntryOrigin then
+		local origin_sender, _, origin_guid = DeathNotificationLib.GetEntryOrigin(_checksum)
+		if Deathlog_isSenderIgnored(origin_sender, origin_guid) then
+			return
+		end
+	end
+
 	local alert_player_data = _player_data
 
 	-- Whitelist alert-eligible entries BEFORE the dedup early-returns below.
@@ -316,16 +363,21 @@ local function newEntry(_player_data, _checksum, num_peer_checks, in_guild, sour
 						_player_data = DeathNotificationLib.MergeEntries(_player_data, entry)
 						deathlog_data[realmName][cs] = nil
 						existing_checksums[cs] = nil
+						Deathlog_forgetEntryOrigin(realmName, cs)
 						break
 					elseif new_quality < existing_quality then
 						-- Existing is better - merge new data into existing, skip
 						local merged = DeathNotificationLib.MergeEntries(entry, _player_data)
 						deathlog_data[realmName][cs] = merged
+						-- Merged rows keep the original key, so attribute the live
+						-- sender to that key rather than the incoming checksum.
+						Deathlog_recordEntryOrigin(realmName, cs, _checksum, source)
 						return
 					else
 						-- Equal quality - merge into existing, skip
 						local merged = DeathNotificationLib.MergeEntries(entry, _player_data)
 						deathlog_data[realmName][cs] = merged
+						Deathlog_recordEntryOrigin(realmName, cs, _checksum, source)
 						return
 					end
 				end
@@ -345,6 +397,8 @@ local function newEntry(_player_data, _checksum, num_peer_checks, in_guild, sour
 		name_index[realmName][player_name] = {}
 	end
 	name_index[realmName][player_name][modified_checksum] = true
+
+	Deathlog_recordEntryOrigin(realmName, modified_checksum, _checksum, source)
 
 	-- Only create widgets for self-reported deaths, peer broadcasts, and Blizzard notifications.
 	-- Death alert is now handled internally by DNL (~DeathAlert.lua) via createEntry().
@@ -592,6 +646,7 @@ local function handleEvent(self, event, ...)
 			initEntryCounters()
 			C_Timer.After(2.5, function()
 				Deathlog_CheckCTA()
+				Deathlog_startInvalidEntryCleanse()
 				Deathlog_startHunterCleanup()
 				DeathNotificationLib.UpdateDeathAlert()
 			end)
@@ -706,6 +761,8 @@ local function SlashHandler(msg, editbox)
 	local command, arg = string.match(string.lower(msg or ""), "^%s*(%S*)%s*(.-)%s*$")
 	command = command or ""
 	arg = arg or ""
+	-- Character names are case-sensitive, so keep the untouched argument too.
+	local raw_arg = string.match(msg or "", "^%s*%S*%s*(.-)%s*$") or ""
 
 	if command == "version" or command == "versions" then
 		printVersions()
@@ -721,6 +778,8 @@ local function SlashHandler(msg, editbox)
 		end
 	elseif command == "update" or command == "updates" then
 		Deathlog_ShowUpdateSources()
+	elseif command == "hidden" or command == "unhide" then
+		handleHiddenCommand(command, raw_arg)
 	elseif command == "minilog" or command == "mini" or command == "mini-log" or command == "ml" then
 		handleMiniLogCommand(arg)
 	else

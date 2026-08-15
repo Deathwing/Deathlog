@@ -20,6 +20,7 @@ DEATHLOG_STRINGS_CN = {
 	guild_word = "公会",
 	race_word = "种族",
 	name_word = "名字",
+	reported_by_word = "举报者",
 	show_heatmap = "热力图",
 	-- tables
 	tab_table = {

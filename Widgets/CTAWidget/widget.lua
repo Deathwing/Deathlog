@@ -1,4 +1,22 @@
 --[[
+Copyright 2026 Deathwing
+The Deathlog AddOn is distributed under the terms of the GNU General Public License (or the Lesser GPL).
+This file is part of Deathlog.
+
+The Deathlog AddOn is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+The Deathlog AddOn is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with the Deathlog AddOn. If not, see <http://www.gnu.org/licenses/>.
+--]]
+--[[
 CTAWidget – Call-to-Action popup for data-rich Deathlog users.
 Shown once per session (with cooldown) when the player has collected enough
 death entries to be valuable for the community database.
@@ -122,7 +140,7 @@ end
 
 local discord_server_label, discord_server_box = createCopyBox(
 	cta_frame, "TOPLEFT", path_text, "BOTTOMLEFT", 0, -14, 250,
-	"Discord Server:", "discord.com/invite/NphuAv75vy"
+	"Discord Server:", "discord.gg/TrJFGcah7z"
 )
 
 local discord_dm_label, discord_dm_box = createCopyBox(

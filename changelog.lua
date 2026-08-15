@@ -1,5 +1,5 @@
 --[[
-Copyright 2026 Yazpad & Deathwing
+Copyright 2026 Deathwing
 The Deathlog AddOn is distributed under the terms of the GNU General Public License.
 This file is part of Deathlog.
 --]]
@@ -28,6 +28,17 @@ local NO_CHANGELOG_VERSIONS = {
 -- Changelog content (update this with each release)
 local CHANGELOG_CONTENT = [[
 |cFFFFD700Deathlog Changelog|r
+
+|cFF00FF00[0.5.23] - 2026-08-12|r
+
+|cFFFFFFFFNew Features|r
+- Local moderation: right-click a death to Report player, Hide name (local-only, reversible with /dl unhide <name>, list with /dl hidden), or — for deaths a peer sent you — Report/Ignore the sender. An offensive name/guild shows in red as 'Report name'
+- Report message: for a death you received live this session, file a chat report that attaches the actual broadcast text (where a griefer hides an offensive fake name) and attributes it to the real sender. Only offered while the message is still fresh in the session it arrived in
+- 'Reported by' attribution: deaths that reached you via a peer now show who reported them in the minilog (optional column), the tooltip, and a new <reported_by> death-alert tag. In the main search window a reported death is marked with a trailing * after the name (hover for the reporter)
+
+|cFFFFFFFFImprovements|r
+- Anti-abuse hardening: the recent fake-death floods (junk names, impossible sources) are now rejected on every path they can arrive through — live broadcasts and background sync both validate entries before storing them, each sender is volume-capped so one player can't flood your log, and a one-time background cleanup removes fabricated entries already in your log
+- 'Killed by: Reported' is gone: peer-reported deaths now predict the killer from the death location like any other unresolved source (shown with the usual trailing *), falling back to 'Unknown' when no prediction is possible
 
 |cFF00FF00[0.5.22] - 2026-07-25|r
 
@@ -207,7 +218,7 @@ local CHANGELOG_CONTENT = [[
 - Guild filter for the search log
 - DeathlogData is now a separate addon (auto-installed as a dependency)
 - Instance min-level enforcement — deaths too low-level for a dungeon/raid are filtered out
-- We now have an official Discord! Click the invite link in the changelog status bar to copy it: `discord.com/invite/NphuAv75vy`
+- We now have an official Discord! Click the invite link in the changelog status bar to copy it: `discord.gg/TrJFGcah7z`
 
 |cFFFFFFFFBug Fixes|r
 - Fixed HardcoreDeaths channel pushing General/Trade/LocalDefense to wrong positions
@@ -276,7 +287,7 @@ local function showChangelog()
 
 	changelog_frame = AceGUI:Create("Frame") ---@type AceGUIFrame
 	changelog_frame:SetTitle("Deathlog - What's New")
-	changelog_frame:SetStatusText("Version " .. CURRENT_VERSION .. "  |  discord.com/invite/NphuAv75vy (click to copy)")
+	changelog_frame:SetStatusText("Version " .. CURRENT_VERSION .. "  |  discord.gg/TrJFGcah7z (click to copy)")
 	changelog_frame:SetLayout("Fill")
 	changelog_frame:SetWidth(500)
 	changelog_frame:SetHeight(450)
@@ -290,7 +301,7 @@ local function showChangelog()
 	if statusbar then
 		statusbar:EnableMouse(true)
 		statusbar:SetScript("OnMouseUp", function()
-			Deathlog_ShowCopyPopup("discord.com/invite/NphuAv75vy")
+			Deathlog_ShowCopyPopup("discord.gg/TrJFGcah7z")
 		end)
 	end
 

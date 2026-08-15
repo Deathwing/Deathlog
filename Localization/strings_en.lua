@@ -21,6 +21,7 @@ DEATHLOG_STRINGS_EN = {
 	guild_word = "Guild",
 	race_word = "Race",
 	name_word = "Name",
+	reported_by_word = "Reported by",
 	show_heatmap = "Show heatmap",
 	-- tables
 	tab_table = {

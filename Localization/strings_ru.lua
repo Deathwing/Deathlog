@@ -20,6 +20,7 @@ DEATHLOG_STRINGS_RU = {
 	guild_word = "Гильдия",
 	race_word = "Раса",
 	name_word = "Имя",
+	reported_by_word = "Сообщил",
 	show_heatmap = "Heatmap",
 	-- tables
 	tab_table = {

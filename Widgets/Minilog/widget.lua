@@ -1,4 +1,23 @@
 ---@diagnostic disable: invisible
+--[[
+Copyright 2023-2025 Yazpad (Aaron Ma) - original author
+Copyright 2023-2026 Deathwing - current author
+The Deathlog AddOn is distributed under the terms of the GNU General Public License (or the Lesser GPL).
+This file is part of Deathlog.
+
+The Deathlog AddOn is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+The Deathlog AddOn is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with the Deathlog AddOn. If not, see <http://www.gnu.org/licenses/>.
+--]]
 local id_to_instance = DeathNotificationLib.ID_TO_INSTANCE
 local deathlog_class_colors = DeathNotificationLib.CLASS_ID_TO_COLOR
 
@@ -232,6 +251,7 @@ local death_log_frame = AceGUI:Create(minilog_type) ---@type DeathlogMiniLog
 death_log_frame.frame:SetMovable(false)
 death_log_frame.frame:EnableMouse(false)
 death_log_frame:SetTitle("Deathlog")
+Deathlog_registerReportDemoteFrame(death_log_frame.frame)
 Deathlog_SetFontWithFallback(death_log_frame.titletext, Deathlog_L.mini_log_font, 19, "THICKOUTLINE")
 
 Deathlog_createInfoButton(death_log_frame, true, 28, -2)
@@ -340,6 +360,13 @@ local subtitle_metadata = {
 		100,
 		function(_entry)
 			return _entry.player_data["last_words"] or ""
+		end,
+	},
+	["ReportedBy"] = {
+		"ReportedBy",
+		90,
+		function(_entry)
+			return Deathlog_getDisplaySender(_entry.player_data) or ""
 		end,
 	},
 	["ClassLogo1"] = {
@@ -614,6 +641,8 @@ local function setupRowEntries()
 			UIDropDownMenu_AddButton(info)
 			info.text, info.hasArrow, info.func, info.disabled = "Inspect user", false, checkSpoof, not canCheckSpoof()
 			UIDropDownMenu_AddButton(info)
+
+			Deathlog_addContextMenuReportItems(death_tomb_frame.clicked_player_data)
 		end
 	end
 
@@ -682,7 +711,8 @@ local function setupRowEntries()
                     death_tomb_frame.coordinates = nil
                 end
 				death_tomb_frame.clicked_name = _entry["player_data"]["name"]
-				
+				death_tomb_frame.clicked_player_data = _entry["player_data"]
+
 				if not _G["WPDemoContextMenu"] then
 					CreateFrame("Frame", "WPDemoContextMenu", UIParent, "UIDropDownMenuTemplate")
 				end
@@ -911,6 +941,7 @@ local defaults = {
 	["tooltip_date"] = true,
 	["tooltip_playtime"] = true,
 	["tooltip_lastwords"] = true,
+	["tooltip_reportedby"] = true,
 	["lock"] = false,
 	["filter_mode"] = "all",  -- "all", "guild_only", "guild_confederation", "none"
 	["source_kind"] = Deathlog_GetDefaultSourceKind(),
@@ -2001,6 +2032,29 @@ options = {
 						end
 						deathlog_settings[widget_name]["tooltip_lastwords"] =
 							not deathlog_settings[widget_name]["tooltip_lastwords"]
+					end,
+				},
+				reported_by = {
+					type = "toggle",
+					name = "Reported By",
+					desc = "Show the 'Reported by' row (who broadcast the death to you) in the minilog tooltip",
+					order = 10,
+					get = function()
+						if
+							deathlog_settings[widget_name]["tooltip_reportedby"] == nil
+							or deathlog_settings[widget_name]["tooltip_reportedby"] == true
+						then
+							return true
+						else
+							return false
+						end
+					end,
+					set = function()
+						if deathlog_settings[widget_name]["tooltip_reportedby"] == nil then
+							deathlog_settings[widget_name]["tooltip_reportedby"] = true
+						end
+						deathlog_settings[widget_name]["tooltip_reportedby"] =
+							not deathlog_settings[widget_name]["tooltip_reportedby"]
 					end,
 				},
 			},

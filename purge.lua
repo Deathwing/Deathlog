@@ -1,4 +1,22 @@
 --[[
+Copyright 2026 Deathwing
+The Deathlog AddOn is distributed under the terms of the GNU General Public License (or the Lesser GPL).
+This file is part of Deathlog.
+
+The Deathlog AddOn is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+The Deathlog AddOn is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with the Deathlog AddOn. If not, see <http://www.gnu.org/licenses/>.
+--]]
+--[[
 purge.lua
 
 Feign Death cleanup: purges false Hunter death entries caused by the
@@ -110,6 +128,7 @@ local total_who_queries = 0  -- actual queries sent
 local function purgeEntry(realmName, db, purged, cs, entry)
 	purged[cs] = true
 	db[cs] = nil
+	Deathlog_forgetEntryOrigin(realmName, cs)
 	local name = entry["name"]
 	if deathlog_data_map[realmName] and deathlog_data_map[realmName][name] == cs then
 		deathlog_data_map[realmName][name] = nil
@@ -680,8 +699,83 @@ local function drainOneWorkItem()
 end
 
 ---------------------------------------------------------------------------
+-- Invalid-entry cleanse (runs once per realm, persisted)
+---------------------------------------------------------------------------
+
+--- Bumping this re-runs the cleanse after the validator or wordlist changes.
+local CLEANSE_VERSION = 1
+
+--- Entries scanned per frame. Each check runs several string.find calls plus a
+--- profanity scan, which is heavier per item than the precompute work that
+--- already trips the Classic Era 1.15.9 frame budget.
+local CLEANSE_BATCH = 100
+
+--- Remove entries that are invalid on every client.
+--- These predate outbound/inbound sync validation, so they can still be
+--- sitting in a local DB from an older client. Deletion is permanent and the
+--- result is version-gated, so this deliberately uses the locale-independent
+--- subset of the validator rather than the full one.
+local function runInvalidEntryCleanse(realmName, db, purged)
+	local isInvalid = DeathNotificationLib and DeathNotificationLib.IsLocaleIndependentlyInvalid
+	if not isInvalid then return end
+
+	local checksums = {}
+	for cs in pairs(db) do
+		checksums[#checksums + 1] = cs
+	end
+
+	local idx, removed = 1, 0
+
+	local function step()
+		local stop = math.min(idx + CLEANSE_BATCH - 1, #checksums)
+		for i = idx, stop do
+			local cs = checksums[i]
+			local entry = db[cs]
+			if entry and isInvalid(entry) then
+				purgeEntry(realmName, db, purged, cs, entry)
+				removed = removed + 1
+			end
+		end
+		idx = stop + 1
+
+		if idx <= #checksums then
+			C_Timer.After(0, step)
+			return
+		end
+
+		purged["_cleanse_version"] = CLEANSE_VERSION
+		if removed > 0 then
+			print("|cFF00FF00[Deathlog]|r Database cleanup: removed "
+				.. removed .. " invalid entries.")
+		end
+		Deathlog_pruneEntryOrigins()
+	end
+
+	step()
+end
+
+---------------------------------------------------------------------------
 -- Auto-start (called from deathlog.lua on PLAYER_ENTERING_WORLD)
 ---------------------------------------------------------------------------
+
+--- Runs independently of the Feign Death purge, which is expiry-gated.
+function Deathlog_startInvalidEntryCleanse()
+	local realmName = GetRealmName()
+	local db = deathlog_data and deathlog_data[realmName]
+	if not db then return end
+
+	if deathlog_purged[realmName] == nil then
+		deathlog_purged[realmName] = {}
+	end
+	local purged = deathlog_purged[realmName]
+
+	if (purged["_cleanse_version"] or 0) >= CLEANSE_VERSION then
+		Deathlog_pruneEntryOrigins()
+		return
+	end
+
+	runInvalidEntryCleanse(realmName, db, purged)
+end
 
 function Deathlog_startHunterCleanup()
 	-- Hard cutoff: no purge activity after the expiry date

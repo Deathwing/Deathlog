@@ -1,0 +1,6 @@
+[submodule "Libs/DeathNotificationLib"]
+	path = Libs/DeathNotificationLib
+	url = https://github.com/Deathwing/DeathNotificationLib.git
+[submodule "Libs/ProfanityLib"]
+	path = Libs/ProfanityLib
+	url = https://github.com/Deathwing/ProfanityLib.git

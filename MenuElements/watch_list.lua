@@ -1,7 +1,8 @@
 --[[
-Copyright 2026 Yazpad & Deathwing
+Copyright 2023-2025 Yazpad (Aaron Ma) - original author
+Copyright 2023-2026 Deathwing - current author
 The Deathlog AddOn is distributed under the terms of the GNU General Public License (or the Lesser GPL).
-This file is part of Hardcore.
+This file is part of Deathlog.
 
 The Deathlog AddOn is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -432,7 +433,6 @@ function watch_list_frame.updateMenuElement(scroll_frame)
 
 		font_strings[i][subtitle_data[1][1]]:SetPoint("LEFT", _entry, "LEFT", 0, 0)
 		font_strings[i][subtitle_data[1][1]]:Show()
-		-- setFontData(1, EntryData("Yazpad", "B"))
 		for _, v in ipairs(subtitle_data) do
 			font_strings[i][v[1]]:SetParent(_entry)
 		end
@@ -441,7 +441,6 @@ function watch_list_frame.updateMenuElement(scroll_frame)
 		row_backgrounds[i]:SetParent(_entry)
 		row_backgrounds[i]:SetWidth(_entry:GetWidth())
 
-		-- _entry:SetHeight(40)
 		_entry:SetWidth(watch_list_frame:GetWidth())
 
 		_entry:SetScript("OnEnter", function(widget)

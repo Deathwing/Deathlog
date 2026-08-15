@@ -20,6 +20,7 @@ DEATHLOG_STRINGS_KO = {
 	guild_word = "길드",
 	race_word = "종족",
 	name_word = "이름",
+	reported_by_word = "제보자",
 	show_heatmap = "사망자 발생 구간 보기",
 	-- tables
 	tab_table = {

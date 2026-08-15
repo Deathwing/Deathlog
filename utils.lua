@@ -1,8 +1,9 @@
 --
 --[[
-Copyright 2026 Yazpad & Deathwing
+Copyright 2023-2025 Yazpad (Aaron Ma) - original author
+Copyright 2023-2026 Deathwing - current author
 The Deathlog AddOn is distributed under the terms of the GNU General Public License (or the Lesser GPL).
-This file is part of Hardcore.
+This file is part of Deathlog.
 
 The Deathlog AddOn is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -472,7 +473,8 @@ function DeathlogGetCachedSource(entry)
 
 	local _pvp_source_name = entry["extra_data"] and entry["extra_data"]["pvp_source_name"]
 	local _sid = tonumber(entry["source_id"])
-	local _source = _sid and Deathlog_GetSourceNameById(_sid, _pvp_source_name) or ""
+	local _reported = _sid == -1
+	local _source = (_sid and not _reported) and Deathlog_GetSourceNameById(_sid, _pvp_source_name) or ""
 
 	if _source == "" then
 		if sc.predicted then
@@ -482,6 +484,8 @@ function DeathlogGetCachedSource(entry)
 			if predicted then
 				sc.predicted = predicted
 				_source = predicted
+			elseif _reported then
+				_source = Deathlog_GetSourceKindLabel(source_kind.UNKNOWN)
 			end
 		end
 	end
@@ -639,9 +643,9 @@ function Deathlog_GetSourceNameById(source_id, pvp_source_name)
 		return pvp_source
 	end
 
-	if source_id_num == -1 then
-		return Deathlog_GetSourceKindLabel(source_kind.REPORTED)
-	end
+	-- if source_id_num == -1 then
+	-- 	return Deathlog_GetSourceKindLabel(source_kind.REPORTED)
+	-- end
 
 	return ""
 end
@@ -716,6 +720,9 @@ end
 --- is disabled, preventing synced low-quality entries from cluttering the view.
 function Deathlog_shouldShowEntry(entry)
 	if entry == nil then
+		return false
+	end
+	if deathlog_hidden_names and deathlog_hidden_names[entry["name"]] then
 		return false
 	end
 	-- Filter entries with level exceeding the max player level (e.g. GM test chars)
@@ -1505,6 +1512,494 @@ function Deathlog_calculatePurges(_deathlog_data)
 	return deathlog_purged or {}
 end
 
+-- ============================================================
+-- Entry origin + sender ignore list
+-- ============================================================
+-- Records who transmitted an entry to us. The sender name comes from WoW's
+-- CHAT_MSG_CHANNEL sender argument, which the server provides and a client
+-- cannot spoof — so it reliably identifies the transmitting account.
+--
+-- It is only recorded for LIVE broadcasts. Sync entries arrive from an
+-- arbitrary relayer many hops from whoever fabricated the data, so recording
+-- that sender would blame innocent players.
+
+--- Live broadcast sources: the sender is accountable for transmitting.
+--- Built lazily; DNL is a separate addon and may load after this file.
+local ATTRIBUTABLE_SOURCES = nil
+local function isAttributableSource(source)
+	if not ATTRIBUTABLE_SOURCES then
+		if not (DeathNotificationLib and DeathNotificationLib.SOURCE) then return false end
+		ATTRIBUTABLE_SOURCES = {
+			[DeathNotificationLib.SOURCE.SELF_DEATH] = true,
+			[DeathNotificationLib.SOURCE.PEER_BROADCAST] = true,
+		}
+	end
+	return ATTRIBUTABLE_SOURCES[source] == true
+end
+
+-- Session-only: stored key -> checksum DNL recorded the origin under. Merges
+-- store the row under a different key than DNL's, and the chat line ID for
+-- "Report message" lives only in DNL's session registry under DNL's checksum.
+local dnl_checksum_by_stored_key = {}
+
+--- Persist the transmitting player for an entry, if it came in live.
+---@param realmName string
+---@param stored_checksum string  Key under which the entry is stored
+---@param dnl_checksum string|nil Checksum DNL used (pre-merge; may differ)
+---@param source string|nil       DNL_Source constant
+function Deathlog_recordEntryOrigin(realmName, stored_checksum, dnl_checksum, source)
+	if not isAttributableSource(source) then return end
+	if not (DeathNotificationLib and DeathNotificationLib.GetEntryOrigin) then return end
+
+	local sender, _, guid = DeathNotificationLib.GetEntryOrigin(dnl_checksum or stored_checksum)
+	if not sender then return end
+
+	dnl_checksum_by_stored_key[stored_checksum] = dnl_checksum or stored_checksum
+
+	deathlog_entry_origin[realmName] = deathlog_entry_origin[realmName] or {}
+	-- Stored as a table so the unforgeable sender GUID rides along with the name.
+	deathlog_entry_origin[realmName][stored_checksum] = { name = sender, guid = guid }
+end
+
+--- Who transmitted this entry to us, or nil when it arrived via sync.
+---@param realmName string
+---@param checksum string
+---@return string|nil sender
+---@return string|nil guid
+function Deathlog_getEntrySender(realmName, checksum)
+	local realm_origins = deathlog_entry_origin and deathlog_entry_origin[realmName]
+	local origin = realm_origins and realm_origins[checksum]
+	if not origin then return nil, nil end
+	return origin.name, origin.guid
+end
+
+--- Drop the origin record for a checksum that is leaving the database.
+---@param realmName string
+---@param checksum string|nil
+function Deathlog_forgetEntryOrigin(realmName, checksum)
+	if not checksum then return end
+	local realm_origins = deathlog_entry_origin and deathlog_entry_origin[realmName]
+	if realm_origins then realm_origins[checksum] = nil end
+end
+
+--- Drop origin records whose entry is no longer in the database. Origins are
+--- only useful while the row they describe exists, but purges and merges delete
+--- rows without going through Deathlog_forgetEntryOrigin, so this sweeps the
+--- remainder on login to keep the SavedVariable from growing without bound.
+function Deathlog_pruneEntryOrigins()
+	local realmName = GetRealmName()
+	local realm_origins = deathlog_entry_origin and deathlog_entry_origin[realmName]
+	if not realm_origins then return end
+
+	local db = deathlog_data and deathlog_data[realmName] or {}
+	for cs, _ in pairs(realm_origins) do
+		if not db[cs] then realm_origins[cs] = nil end
+	end
+end
+
+--- Sender lookup straight from an entry.
+--- Recomputing the Fletcher16 is only a fast path: merging a lower-quality
+--- arrival into a stored entry rewrites its fields but keeps the original key,
+--- so a merged row no longer hashes to the key it lives under. Fall back to
+--- matching the stored table by identity, which stays correct across merges.
+---@param player_data PlayerData|nil
+---@return string|nil sender
+---@return string|nil guid
+function Deathlog_getEntrySenderForData(player_data)
+	if not player_data or not player_data["name"] then return nil end
+	if not (DeathNotificationLib and DeathNotificationLib.Fletcher16) then return nil end
+
+	local realmName = GetRealmName()
+	local sender, guid = Deathlog_getEntrySender(realmName, DeathNotificationLib.Fletcher16(player_data))
+	if sender then return sender, guid end
+
+	-- Only live entries are ever recorded, so this table is far smaller than the db.
+	local realm_origins = deathlog_entry_origin and deathlog_entry_origin[realmName]
+	if not realm_origins then return nil end
+	local db = deathlog_data and deathlog_data[realmName]
+	if not db then return nil end
+
+	for cs, origin in pairs(realm_origins) do
+		if db[cs] == player_data then return origin.name, origin.guid end
+	end
+	return nil
+end
+
+--- True when we know who transmitted the entry, i.e. "report sender" applies.
+---@param realmName string
+---@param checksum string
+---@return boolean
+function Deathlog_canReportSender(realmName, checksum)
+	return Deathlog_getEntrySender(realmName, checksum) ~= nil
+end
+
+-- Senders are ignored by their unforgeable chat GUID so a rename or a spoofed
+-- name cannot slip past. The name is kept only as a display label. Keyed by GUID
+-- when we have one, otherwise by name (self-reports/older rows without a GUID).
+---@param sender string       Display name of the sender
+---@param guid string|nil     Server-stamped chat GUID, if known
+function Deathlog_ignoreSender(sender, guid)
+	local key = guid or sender
+	if type(key) ~= "string" or key == "" then return end
+	deathlog_ignored_senders[key] = sender ~= "" and sender or true
+end
+
+---@param sender string       Display name of the sender
+---@param guid string|nil     Server-stamped chat GUID, if known
+function Deathlog_unignoreSender(sender, guid)
+	local key = guid or sender
+	if type(key) ~= "string" then return end
+	deathlog_ignored_senders[key] = nil
+end
+
+---@param sender string|nil   Display name of the sender
+---@param guid string|nil     Server-stamped chat GUID, if known
+---@return boolean
+function Deathlog_isSenderIgnored(sender, guid)
+	if type(guid) == "string" and guid ~= "" and deathlog_ignored_senders[guid] then
+		return true
+	end
+	if type(sender) ~= "string" or sender == "" then return false end
+	return deathlog_ignored_senders[sender] ~= nil
+end
+
+-- ============================================================
+-- Hidden names (local moderation)
+-- ============================================================
+-- Suppresses a character name that our validator considers well-formed but the
+-- user finds offensive. Hiding drops the name from the log, the alert popup and
+-- our sync responses. It stays purely local: one player's judgement must not
+-- delete data from anyone else's database.
+--
+-- The hidden list is its own permanent gate, deliberately kept OUT of
+-- deathlog_purged. Sharing that set would mean unhiding has to guess which
+-- checksums it may release, and it would wrongly free rows the feign-death
+-- pass purged for unrelated reasons.
+
+local function dropHiddenNameEntries(player_name)
+	local realmName = GetRealmName()
+	local db = deathlog_data and deathlog_data[realmName]
+	if not db then return end
+
+	for cs, entry in pairs(db) do
+		if entry["name"] == player_name then
+			db[cs] = nil
+			Deathlog_forgetEntryOrigin(realmName, cs)
+		end
+	end
+
+	if deathlog_data_map[realmName] then
+		deathlog_data_map[realmName][player_name] = nil
+	end
+end
+
+---@param player_name string
+function Deathlog_hideName(player_name)
+	if type(player_name) ~= "string" or player_name == "" then return end
+	deathlog_hidden_names[player_name] = true
+	dropHiddenNameEntries(player_name)
+	Deathlog_refreshAfterModeration()
+end
+
+--- Stops suppression. Already-dropped rows return only if a peer re-syncs them.
+---@param player_name string
+function Deathlog_unhideName(player_name)
+	if type(player_name) ~= "string" then return end
+	deathlog_hidden_names[player_name] = nil
+	Deathlog_refreshAfterModeration()
+end
+
+---@return string[] sorted player names
+function Deathlog_getHiddenNames()
+	local names = {}
+	for name, hidden in pairs(deathlog_hidden_names or {}) do
+		if hidden then names[#names + 1] = name end
+	end
+	table.sort(names)
+	return names
+end
+
+---@param player_name string|nil
+---@return boolean
+function Deathlog_isNameHidden(player_name)
+	if type(player_name) ~= "string" or player_name == "" then return false end
+	return deathlog_hidden_names[player_name] == true
+end
+
+-- Never reassign StaticPopupDialogs: replacing the global taints the table and
+-- breaks Blizzard's own popups (logout countdown). Only insert our key.
+if StaticPopupDialogs then
+	StaticPopupDialogs["DEATHLOG_CONFIRM_HIDE_NAME"] = {
+		text = "Hide all Deathlog entries for |cffff4040%s|r?\n\nThis removes them from your log and stops your client from sharing them. It only affects you \226\128\148 undo with /dl unhide.",
+		button1 = YES,
+		button2 = NO,
+		OnAccept = function(self, player_name)
+			Deathlog_hideName(player_name)
+		end,
+		timeout = 0,
+		whileDead = true,
+		hideOnEscape = true,
+		preferredIndex = 3,
+	}
+end
+
+---@param player_name string
+function Deathlog_confirmHideName(player_name)
+	if type(player_name) ~= "string" or player_name == "" then return end
+	if StaticPopupDialogs and StaticPopupDialogs["DEATHLOG_CONFIRM_HIDE_NAME"] and StaticPopup_Show then
+		local popup = StaticPopup_Show("DEATHLOG_CONFIRM_HIDE_NAME", player_name, nil, player_name)
+		-- The main window sits at FULLSCREEN_DIALOG, above the popup's default
+		-- DIALOG strata, so raise the popup above it or it opens hidden behind.
+		if popup then
+			popup:SetFrameStrata("FULLSCREEN_DIALOG")
+			popup:SetToplevel(true)
+			popup:Raise()
+		end
+	else
+		Deathlog_hideName(player_name)
+	end
+end
+
+--- Repaint both logs so a moderation action takes effect without a reload.
+function Deathlog_refreshAfterModeration()
+	if Deathlog_minilog_refreshEntries then
+		Deathlog_minilog_refreshEntries()
+	end
+	if Deathlog_menuRefreshSearchResults then
+		Deathlog_menuRefreshSearchResults()
+	end
+end
+
+--- What the user can report for an entry.
+--- The dead player's name is always reportable — an offensive character name
+--- stands on its own regardless of how the record reached us. The sender is
+--- only reportable for live broadcasts, otherwise we would accuse a relayer.
+---@param player_data PlayerData
+---@return { name: string|nil, sender: string|nil, sender_guid: string|nil, name_profane: boolean }
+function Deathlog_getReportTargets(player_data)
+	local targets = { name_profane = false }
+	if not player_data then return targets end
+
+	targets.name = player_data["name"]
+	local containsProfanity = DeathNotificationLib.ContainsProfanity
+	if containsProfanity then
+		targets.name_profane = containsProfanity(player_data["name"])
+			or containsProfanity(player_data["guild"])
+	end
+	targets.sender, targets.sender_guid = Deathlog_getEntrySenderForData(player_data)
+	return targets
+end
+
+--- The sender to DISPLAY as "reported by". A self-report (sender == the dead
+--- player) is not a third-party report, so it is shown as nothing.
+---@param player_data PlayerData|nil
+---@return string|nil sender
+function Deathlog_getDisplaySender(player_data)
+	if not player_data then return nil end
+	local sender = Deathlog_getEntrySenderForData(player_data)
+	if sender and sender == player_data["name"] then return nil end
+	return sender
+end
+
+-- The Deathlog windows sit at FULLSCREEN_DIALOG, above ReportFrame's native
+-- DIALOG strata, so the report dialog would open hidden behind them. Raising
+-- ReportFrame instead breaks its reason dropdown: the dropdown's menu is
+-- layered relative to the dialog by Blizzard code we cannot adjust, so it ends
+-- up behind the raised dialog. Leave ReportFrame fully native and temporarily
+-- demote our windows below it while it is shown.
+local report_demote_frames = {}
+local report_demoted_strata = {}
+local report_frame_hooked = false
+
+--- Register a window to be lowered while Blizzard's report dialog is open.
+function Deathlog_registerReportDemoteFrame(frame)
+	if frame then
+		report_demote_frames[frame] = true
+	end
+end
+
+-- Only frames on these strata can cover ReportFrame (DIALOG); anything lower
+-- must be left alone or we'd RAISE it above its own children (minilog skull).
+local STRATA_ABOVE_REPORT = {
+	["FULLSCREEN"] = true,
+	["FULLSCREEN_DIALOG"] = true,
+	["TOOLTIP"] = true,
+}
+
+local function lowerDeathlogWindowsForReport()
+	if not (ReportFrame and ReportFrame:IsShown()) then return end
+	for frame in pairs(report_demote_frames) do
+		if report_demoted_strata[frame] == nil and STRATA_ABOVE_REPORT[frame:GetFrameStrata()] then
+			report_demoted_strata[frame] = frame:GetFrameStrata()
+			frame:SetFrameStrata("HIGH")
+		end
+	end
+	if not report_frame_hooked then
+		report_frame_hooked = true
+		ReportFrame:HookScript("OnHide", function()
+			for frame, strata in pairs(report_demoted_strata) do
+				frame:SetFrameStrata(strata)
+				report_demoted_strata[frame] = nil
+			end
+		end)
+	end
+end
+
+--- Open Blizzard's report dialog for a player name.
+--- The dialog lets the user pick the category (InappropriateName etc.),
+--- so we only need to supply the name.
+---@param player_name string
+---@return boolean opened
+function Deathlog_reportPlayer(player_name)
+	if type(player_name) ~= "string" or player_name == "" then return false end
+	if not (ReportInfo and ReportInfo.CreateReportInfoFromType) then return false end
+	if not (ReportFrame and ReportFrame.InitiateReport) then return false end
+	if not (Enum and Enum.ReportType and Enum.ReportType.InWorld) then return false end
+
+	local reportInfo = ReportInfo:CreateReportInfoFromType(Enum.ReportType.InWorld)
+	if not reportInfo then return false end
+
+	ReportFrame:InitiateReport(reportInfo, player_name)
+	lowerDeathlogWindowsForReport()
+	return true
+end
+
+--- Live-session chat line ID for the broadcast that carried this entry, if we
+--- still hold it. Kept only in DNL's session-local origin registry (never
+--- persisted), so a reloaded row returns nil.
+---@param player_data PlayerData|nil
+---@return number|nil line_id
+---@return string|nil sender
+function Deathlog_getEntryReportLine(player_data)
+	if not player_data or not player_data["name"] then return nil end
+	if not (DeathNotificationLib and DeathNotificationLib.Fletcher16 and DeathNotificationLib.GetEntryOrigin) then
+		return nil
+	end
+
+	-- A merged row is stored under a key that no longer matches DNL's checksum,
+	-- so map the stored key back to the checksum DNL recorded the line ID under.
+	local cs = DeathNotificationLib.Fletcher16(player_data)
+	local dnl_cs = dnl_checksum_by_stored_key[cs]
+	if not dnl_cs then
+		-- Merges rewrite fields but keep the original key, so the recomputed
+		-- checksum can also miss; fall back to identity-matching the stored row.
+		local db = deathlog_data and deathlog_data[GetRealmName()]
+		if db then
+			for stored_cs, mapped_cs in pairs(dnl_checksum_by_stored_key) do
+				if db[stored_cs] == player_data then
+					dnl_cs = mapped_cs
+					break
+				end
+			end
+		end
+	end
+
+	local sender, _, _, line_id = DeathNotificationLib.GetEntryOrigin(dnl_cs or cs)
+	if line_id then return line_id, sender end
+	return nil
+end
+
+--- Open Blizzard's report dialog for a specific chat MESSAGE (spam/chat), so the
+--- offending broadcast text is attached and attributed to the sender. Needs the
+--- live chat line ID, which only exists during the session the death arrived in.
+---@param sender string      The account that broadcast the message
+---@param line_id number     Chat line ID captured at receive time
+---@return boolean opened
+function Deathlog_reportPlayerMessage(sender, line_id)
+	if type(sender) ~= "string" or sender == "" then return false end
+	if type(line_id) ~= "number" then return false end
+	if not (ReportInfo and ReportInfo.CreateReportInfoFromType) then return false end
+	if not (ReportFrame and ReportFrame.InitiateReport) then return false end
+	if not (Enum and Enum.ReportType and Enum.ReportType.Chat) then return false end
+	if not (PlayerLocation and PlayerLocation.CreateFromChatLineID) then return false end
+
+	local reportInfo = ReportInfo:CreateReportInfoFromType(Enum.ReportType.Chat)
+	if not reportInfo then return false end
+
+	local location = PlayerLocation:CreateFromChatLineID(line_id)
+	ReportFrame:InitiateReport(reportInfo, sender, location)
+	lowerDeathlogWindowsForReport()
+	return true
+end
+
+--- Append the report / ignore entries shared by the minilog and the main log
+--- context menus. `player_data` is the death entry that was right-clicked.
+---@param player_data PlayerData|nil
+function Deathlog_addContextMenuReportItems(player_data)
+	if not player_data then return end
+
+	local targets = Deathlog_getReportTargets(player_data)
+	-- A self-report's sender is the victim, so it names no third party to act on.
+	local sender = targets.sender
+	local sender_guid = targets.sender_guid
+	local reported_by_third_party = sender ~= nil and sender ~= targets.name
+
+	local function addButton(text, func)
+		local info = UIDropDownMenu_CreateInfo()
+		info.text = text
+		info.hasArrow = false
+		info.func = func
+		UIDropDownMenu_AddButton(info)
+	end
+
+	-- The dead player's own name is only worth reporting when nobody else was
+	-- named as the reporter — a third-party report points at the sender instead.
+	if targets.name and not reported_by_third_party then
+		addButton(
+			targets.name_profane and "|cffff4040Report name|r" or "Report player",
+			function() Deathlog_reportPlayer(targets.name) end
+		)
+	end
+
+	if targets.name then
+		local hidden = Deathlog_isNameHidden(targets.name)
+		addButton(
+			hidden and "Unhide name" or "Hide name",
+			function()
+				if hidden then
+					Deathlog_unhideName(targets.name)
+				else
+					Deathlog_confirmHideName(targets.name)
+				end
+			end
+		)
+	end
+
+	-- Sender actions only make sense when a third party reported the death: a
+	-- synced entry has no attributable sender and a self-report names the victim.
+	if reported_by_third_party then
+		-- Reporting the sender is always ABOUT what they transmitted, so prefer
+		-- a Chat report with the broadcast text attached (the only type offering
+		-- the Inappropriate Communication / Spam categories). The line ID only
+		-- lives for the session the death arrived in; for older rows fall back
+		-- to a plain in-world report against the sender.
+		local line_id, line_sender = Deathlog_getEntryReportLine(player_data)
+		if line_id and line_sender == sender then
+			addButton(
+				"Report sender: " .. sender,
+				function() Deathlog_reportPlayerMessage(sender, line_id) end
+			)
+		else
+			addButton(
+				"Report sender: " .. sender,
+				function() Deathlog_reportPlayer(sender) end
+			)
+		end
+
+		local ignored = Deathlog_isSenderIgnored(sender, sender_guid)
+		addButton(
+			ignored and ("Unignore sender: " .. sender) or ("Ignore sender: " .. sender),
+			function()
+				if ignored then
+					Deathlog_unignoreSender(sender, sender_guid)
+				else
+					Deathlog_ignoreSender(sender, sender_guid)
+				end
+			end
+		)
+	end
+end
+
 -- Cache: map bounds (rect on parent) and parent chain per map_id.
 -- Computed once per session from C_Map API, reused across all deaths.
 local map_bounds_cache = {} -- [child_map_id] = {parent, x1, y1, x2, y2} or false
@@ -1733,6 +2228,7 @@ function Deathlog_setTooltipFromEntry(_entry)
 	if _entry["last_words"] ~= nil and not _entry["last_words"]:match("^%s*$") then
 		_last_words = _entry["last_words"]
 	end
+	local _reported_by = Deathlog_getDisplaySender(_entry)
 
 	if _entry["race_id"] ~= nil then
 		local race_info = C_CreatureInfo.GetRaceInfo(_entry["race_id"])
@@ -1761,10 +2257,10 @@ function Deathlog_setTooltipFromEntry(_entry)
 	elseif _entry["instance_id"] then
 		_zone = (id_to_instance[_entry["instance_id"]] or _entry["instance_id"])
 	end
-	Deathlog_setTooltip(_name, _level, _guild, _race, _class, _source, _zone, _date, _playtime, _last_words)
+	Deathlog_setTooltip(_name, _level, _guild, _race, _class, _source, _zone, _date, _playtime, _last_words, _reported_by)
 end
 
-function Deathlog_setTooltip(_name, _lvl, _guild, _race, _class, _source, _zone, _date, _playtime, _last_words)
+function Deathlog_setTooltip(_name, _lvl, _guild, _race, _class, _source, _zone, _date, _playtime, _last_words, _reported_by)
 	if _name == nil or _lvl == nil then
 		return
 	end
@@ -1847,6 +2343,12 @@ function Deathlog_setTooltip(_name, _lvl, _guild, _race, _class, _source, _zone,
 	if ml["tooltip_lastwords"] then
 		if _last_words and _last_words ~= "" then
 			GameTooltip:AddLine(Deathlog_L.last_words_word .. ": " .. _last_words, 1, 1, 0, true)
+		end
+	end
+
+	if ml["tooltip_reportedby"] then
+		if _reported_by and _reported_by ~= "" then
+			GameTooltip:AddLine(Deathlog_L.reported_by_word .. ": " .. _reported_by, 1, 1, 1)
 		end
 	end
 end

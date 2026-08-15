@@ -2,29 +2,33 @@
 ## Title: Deathlog
 ## Notes: Only for Hardcore on classic era or Burning Crusade Anniversary servers.
 ## IconTexture: Interface\AddOns\Deathlog\Media\logo.png
-## Author: Yazpad & Deathwing
+## Author: Deathwing, originally by Yazpad
 ## X-License: GNU GPL3
 ## X-Category: Leveling,Guild
 ## Category: Hardcore
-## Version: 0.5.22
+## Version: 0.5.23
 ## X-Website: https://github.com/Deathwing/Deathlog
 ## X-Repository: https://github.com/Deathwing/Deathlog
 ## X-Curse-Project-ID: 860689
 ## X-Wago-ID: rN4kPAGD
 ## X-WoWI-ID: 27170
-# DEATHLOG_UNCOMMENT_NEXT_LINE
+# UNCOMMENT_NEXT_LINE
 # ## Dependencies: DeathNotificationLib
-# DEATHLOG_UNCOMMENT_NEXT_LINE
+# UNCOMMENT_NEXT_LINE
 # ## OptionalDeps: DeathlogData
 
 ## DefaultState: enabled
-## SavedVariables: deathlog_settings, deathlog_data, deathlog_data_map, deathlog_watchlist_entries, deathlog_record_econ_stats, deathlog_entry_counts, deathlog_purged, deathlog_precomputed
+## SavedVariables: deathlog_settings, deathlog_data, deathlog_data_map, deathlog_watchlist_entries, deathlog_record_econ_stats, deathlog_entry_counts, deathlog_purged, deathlog_precomputed, deathlog_entry_origin, deathlog_ignored_senders, deathlog_hidden_names
 ## SavedVariablesPerCharacter: deathlog_char_data
-# DEATHLOG_REMOVE_NEXT_LINE
+# REMOVE_NEXT_LINE
+Libs/ProfanityLib/Data/ProfanityLibData.xml
+# REMOVE_NEXT_LINE
+Libs/ProfanityLib/ProfanityLib.xml
+# REMOVE_NEXT_LINE
 Libs/DeathNotificationLib/Data/DeathNotificationLibData.xml
-# DEATHLOG_REMOVE_NEXT_LINE
+# REMOVE_NEXT_LINE
 Libs/DeathNotificationLib/DeathNotificationLib.xml
-# DEATHLOG_REMOVE_NEXT_LINE
+# REMOVE_NEXT_LINE
 Data/DeathlogData.xml
 
 Localization/strings_cn.lua
@@ -72,7 +76,5 @@ Widgets/CTAWidget/widget.lua
 
 menu.lua
 changelog.lua
-# DEATHLOG_REMOVE_NEXT_LINE
-Testing/update_nudge.lua
 
 deathlog.lua

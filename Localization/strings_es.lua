@@ -20,6 +20,7 @@ DEATHLOG_STRINGS_ES = {
 	guild_word = "Hermandad",
 	race_word = "Raza",
 	name_word = "Nombre",
+	reported_by_word = "Reportado por",
 	show_heatmap = "Mapa de calor",
 	-- tables
 	tab_table = {

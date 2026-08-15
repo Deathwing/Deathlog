@@ -5,7 +5,7 @@
 ## Author: Deathwing
 ## X-Website: https://github.com/Deathwing/Deathlog
 ## X-Repository: https://github.com/Deathwing/Deathlog
-## X-Curse-Project-ID: 1479309
+## X-Curse-Project-ID: 1644667
 ## X-License: GNU GPL3
 ## X-Category: Library
 ## Category-enUS: Libraries
@@ -19,6 +19,6 @@
 ## Category-ruRU: Библиотеки
 ## Category-zhCN: 函数库
 ## Category-zhTW: 函式庫
-## Version: 1786752000
+## Version: 1.0.0
 
 DeathlogData.xml

@@ -1,3 +1,22 @@
+--[[
+Copyright 2023-2025 Yazpad (Aaron Ma) - original author
+Copyright 2023-2026 Deathwing - current author
+The Deathlog AddOn is distributed under the terms of the GNU General Public License (or the Lesser GPL).
+This file is part of Deathlog.
+
+The Deathlog AddOn is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+The Deathlog AddOn is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with the Deathlog AddOn. If not, see <http://www.gnu.org/licenses/>.
+--]]
 local AceGUI = LibStub("AceGUI-3.0")
 local widget_name = "Heatmap Indicator"
 local heatmap_indicator_frame = CreateFrame("frame")

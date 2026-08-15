@@ -1,7 +1,8 @@
 --[[
-Copyright 2026 Yazpad & Deathwing
+Copyright 2023-2025 Yazpad (Aaron Ma) - original author
+Copyright 2023-2026 Deathwing - current author
 The Deathlog AddOn is distributed under the terms of the GNU General Public License (or the Lesser GPL).
-This file is part of Hardcore.
+This file is part of Deathlog.
 
 The Deathlog AddOn is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -29,6 +30,7 @@ local deathlog_environment_damage = DeathNotificationLib.ENVIRONMENT_DAMAGE
 local instance_categories = DeathNotificationLib.INSTANCE_CATEGORIES
 local zone_categories = DeathNotificationLib.ZONE_CATEGORIES
 local deathlog_class_colors = DeathNotificationLib.CLASS_ID_TO_COLOR
+local source_kind = Deathlog_GetSourceKindConstants()
 
 local _menu_width = 1100
 local _inner_menu_width = 800
@@ -264,6 +266,8 @@ local function WPDropDownDemo_Menu(frame, level, menuList)
 		UIDropDownMenu_AddButton(info)
 		info.text, info.hasArrow, info.func, info.disabled = "Block user", false, blockUser, not canBlockUser()
 		UIDropDownMenu_AddButton(info)
+
+		Deathlog_addContextMenuReportItems(death_tomb_frame.clicked_player_data)
 	end
 end
 
@@ -294,7 +298,12 @@ local subtitle_data = {
 		"Name",
 		90,
 		function(_entry, _server_name)
-			return _entry["name"] or ""
+			local name = _entry["name"] or ""
+			-- Trailing * marks a death a peer reported to us (see tooltip for who).
+			if name ~= "" and Deathlog_getDisplaySender(_entry) then
+				return name .. "*"
+			end
+			return name
 		end,
 	},
 	{
@@ -448,6 +457,7 @@ local function clearDeathlogMenuLogData(skipPageReset)
 		for _, col in ipairs(subtitle_data) do
 			v[col[1]]:SetText("")
 		end
+		v.player_data = nil
 	end
 	-- Hide pagination when clearing (will be shown again if data is available)
 	if not skipPageReset then
@@ -472,6 +482,7 @@ local function displayPageFromCache()
 			fs:SetText(text)
 			Deathlog_menuApplyFontForText(fs, text, main_font, 10)
 		end
+		font_strings[i].player_data = ordered[idx]
 		if ordered[idx] and ordered[idx].map_id then
 			font_strings[i].map_id = ordered[idx].map_id
 		else
@@ -535,6 +546,7 @@ local function setDeathlogMenuLogData(data)
 			fs:SetText(text)
 			Deathlog_menuApplyFontForText(fs, text, main_font, 10)
 		end
+		font_strings[i].player_data = ordered[idx]
 		if ordered[idx] and ordered[idx].map_id then
 			font_strings[i].map_id = ordered[idx].map_id
 		else
@@ -669,6 +681,13 @@ local function refreshMenuSearchResults(skipPageReset)
 	else
 		setDeathlogMenuLogData(_deathlog_data)
 	end
+end
+
+-- Lets moderation actions in utils.lua repaint the log without a reload.
+function Deathlog_menuRefreshSearchResults()
+	if not (deathlog_menu and deathlog_menu:IsShown()) then return end
+	if not _deathlog_data then return end
+	refreshMenuSearchResults(true)
 end
 
 local function drawLogTab(container)
@@ -1847,6 +1866,7 @@ local function drawLogTab(container)
 					death_tomb_frame.map_id = font_strings[i].map_id
 					death_tomb_frame.coordinates = font_strings[i].map_id_coords_x and { font_strings[i].map_id_coords_x, font_strings[i].map_id_coords_y } or nil
 					death_tomb_frame.clicked_name = nameText
+					death_tomb_frame.clicked_player_data = font_strings[i].player_data
 
 					local dropDown = CreateFrame("Frame", "WPDemoContextMenu", UIParent, "UIDropDownMenuTemplate")
 					-- Bind an initializer function to the dropdown; see previous sections for initializer function examples.
@@ -1875,7 +1895,8 @@ local function drawLogTab(container)
 			local _playtime = ""
 			local _last_words = ""
 			if font_strings[i] and font_strings[i]["Name"] then
-				_name = font_strings[i]["Name"]:GetText() or ""
+				-- Drop the trailing "reported" * so it doesn't leak into the title.
+				_name = (font_strings[i]["Name"]:GetText() or ""):gsub("%*$", "")
 			end
 			if font_strings[i] and font_strings[i]["Lvl"] then
 				_level = font_strings[i]["Lvl"]:GetText() or ""
@@ -1904,7 +1925,11 @@ local function drawLogTab(container)
 			if font_strings[i] and font_strings[i]["Last Words"] then
 				_last_words = font_strings[i]["Last Words"]:GetText() or ""
 			end
-			Deathlog_setTooltip(_name, _level, _guild, _race, _class, _source, _zone, _date, _playtime, _last_words)
+			local _reported_by = ""
+			if font_strings[i] and font_strings[i].player_data then
+				_reported_by = Deathlog_getDisplaySender(font_strings[i].player_data) or ""
+			end
+			Deathlog_setTooltip(_name, _level, _guild, _race, _class, _source, _zone, _date, _playtime, _last_words, _reported_by)
 			GameTooltip:Show()
 		end)
 
@@ -2283,7 +2308,7 @@ local function drawStatisticsTab(container)
 
 		local top_source_name = Deathlog_GetSourceNameById(top_source_id)
 		if top_source_name == "" then
-			top_source_name = Deathlog_GetSourceKindLabel(leader_kind)
+			top_source_name = Deathlog_GetSourceKindLabel(source_kind.UNKNOWN)
 		end
 
 		return string.format("Top %s: %s", Deathlog_GetSourceKindLabel(leader_kind), top_source_name)
@@ -2689,6 +2714,7 @@ local function createDeathlogMenu()
 	local ace_deathlog_menu = AceGUI:Create(menu_type) ---@type AceGUIDeathlogMenu
 	_G["AceDeathlogMenu"] = ace_deathlog_menu.frame -- Close on <ESC>
 	tinsert(UISpecialFrames, "AceDeathlogMenu")
+	Deathlog_registerReportDemoteFrame(ace_deathlog_menu.frame)
 
 	ace_deathlog_menu:SetTitle("Deathlog")
 	ace_deathlog_menu:SetVersion(GetAddOnMetadata("Deathlog", "Version"))
@@ -2729,7 +2755,7 @@ local function createDeathlogMenu()
 		contact_text:SetFont(Deathlog_L.menu_font, 14)
 		contact_text:SetTextColor(0.5, 0.5, 0.5, 0.8)
 		contact_text:SetPoint("BOTTOMLEFT", ace_deathlog_menu.frame, "BOTTOMLEFT", 18, 10)
-		contact_text:SetText("Questions/Feedback? discord.com/invite/NphuAv75vy")
+		contact_text:SetText("Questions/Feedback? discord.gg/TrJFGcah7z")
 
 		local contact_btn = CreateFrame("Button", nil, ace_deathlog_menu.frame)
 		contact_btn:SetAllPoints(contact_text)
@@ -2745,7 +2771,7 @@ local function createDeathlogMenu()
 			GameTooltip:Hide()
 		end)
 		contact_btn:SetScript("OnClick", function()
-			Deathlog_ShowCopyPopup("discord.com/invite/NphuAv75vy")
+			Deathlog_ShowCopyPopup("discord.gg/TrJFGcah7z")
 		end)
 		ace_deathlog_menu.contact_button = contact_btn
 	end

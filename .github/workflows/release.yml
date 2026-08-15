@@ -24,6 +24,8 @@ jobs:
     steps:
       - name: Checkout tagged addon
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Checkout private release tooling
         uses: actions/checkout@v4
@@ -84,7 +86,7 @@ jobs:
         continue-on-error: true
         run: |
           if [[ -z "$CF_UPLOAD_TOKEN" ]]; then echo "CF_UPLOAD_TOKEN not configured; skipping."; exit 0; fi
-          node upload.js upload --release --only Deathlog,DeathlogData,DeathNotificationLib,DeathNotificationLibData
+          node upload.js upload --release --only Deathlog,DeathlogData,DeathNotificationLib,DeathNotificationLibData,ProfanityLib,ProfanityLibData
 
       - name: Publish bundled package to Wago
         id: wago

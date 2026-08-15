@@ -2,6 +2,20 @@
 
 All notable changes to Deathlog will be documented in this file.
 
+## [0.5.23] - 2026-08-12
+
+### New Features
+- **Local moderation for offensive entries.** Right-clicking a death in the log or minilog now offers:
+  - **Report player / Report name** — opens Blizzard's in-game report dialog for the dead character. When the name (or its guild) trips the profanity filter the entry is shown in red as "Report name".
+  - **Hide name** — removes every entry for that character from your log and stops your client from sharing them onward. It is purely local (it never deletes data from anyone else) and fully reversible with `/dl unhide <name>`. A confirmation popup explains what will happen. `/dl hidden` lists everything you have hidden.
+  - **Report sender / Ignore sender** — for deaths a peer broadcast to you, report or mute the player who sent it. Ignoring a sender drops all of their future live broadcasts, matched on the server-stamped chat identity so a rename or a spoofed name can't slip past.
+  - **Report message** — for a death you received live this session, files a chat report that attaches the actual broadcast text (which is where a griefer hides an offensive fake name) and attributes it to the real sender. Only offered while the message is still fresh in the session it arrived in.
+- **"Reported by" attribution.** Deaths that reached you through a peer now show who reported them, in the minilog (optional "ReportedBy" column), the tooltip ("Reported by" row, toggleable), and via a new `<reported_by>` death-alert tag. In the main search window a reported death is instead marked with a trailing `*` after the name (hover for the reporter), keeping the table compact.
+
+### Improvements
+- **Anti-abuse hardening against fake-death floods.** The recent wave of fabricated deaths (junk names, impossible sources) is now rejected on every path it can arrive through: both live broadcasts and background sync validate entries before storing them, each sender is volume-capped so a single player can no longer flood your log with hundreds of entries, and a one-time background cleanup removes fabricated entries already sitting in your log.
+- **"Killed by: Reported" is gone.** Peer-reported deaths carry no killer information, so the killer is now predicted from the death location like any other unresolved source (shown with the usual trailing `*`), and when no prediction is possible the killer shows as "Unknown" instead of "Reported".
+
 ## [0.5.22] - 2026-07-25
 
 ### Fixes
@@ -210,7 +224,7 @@ All notable changes to Deathlog will be documented in this file.
 - **Guild filter** in search log — filter the death log by guild name
 - **DeathlogData** is now a separate addon, installed automatically as a dependency
 - **Instance minimum level enforcement** — deaths from players too low-level for a dungeon or raid are now filtered out (e.g. a level 1 death in AQ20 is no longer counted)
-- **Deathlog Discord** — join the community on Discord for support, feedback, and discussion: `discord.com/invite/NphuAv75vy` (invite link also available in the changelog status bar)
+- **Deathlog Discord** — join the community on Discord for support, feedback, and discussion: `discord.gg/TrJFGcah7z` (invite link also available in the changelog status bar)
 
 ### Improvements
 - `wow_project_id` is now recorded in saved variables, improving expansion-aware data collection
