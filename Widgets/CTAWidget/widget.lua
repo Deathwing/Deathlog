@@ -206,14 +206,16 @@ end)
 tinsert(UISpecialFrames, "DeathlogCTAWidget")
 
 local function getTotalEntryCount()
-    if not deathlog_entry_counts then return 0 end
-    return deathlog_entry_counts["total"] or 0
+	local counts = Deathlog_EntryCounts and Deathlog_EntryCounts()
+	if not counts then return 0 end
+	return counts["total"] or 0
 end
 
 local function getValidEntryCount()
-	if not deathlog_entry_counts then return 0 end
-	local self_death = deathlog_entry_counts[SOURCE.SELF_DEATH] or 0
-	local peer_broadcast = deathlog_entry_counts[SOURCE.PEER_BROADCAST] or 0
+	local counts = Deathlog_EntryCounts and Deathlog_EntryCounts()
+	if not counts then return 0 end
+	local self_death = counts[SOURCE.SELF_DEATH] or 0
+	local peer_broadcast = counts[SOURCE.PEER_BROADCAST] or 0
 	return self_death + peer_broadcast
 end
 

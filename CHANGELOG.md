@@ -2,6 +2,22 @@
 
 All notable changes to Deathlog will be documented in this file.
 
+## [0.5.24] - 2026-09-09
+
+### New Features
+- **Deathmap links.** Right-click a death in the main log or the mini log and pick **Copy Deathmap URL** to get a link to that character on [wowdeathmap.com](https://wowdeathmap.com), opened directly at that death. If the death is not on the site yet, the page offers to upload it. Very recent deaths can take a few minutes to show up.
+- **"View on wowdeathmap.com" badge** at the bottom of the main window. Click it to copy a link to the live map of all deaths.
+
+### Improvements
+- **Easier-to-read copy windows.** The little windows that hand you a link to copy (Discord invite, Deathmap links) now have a solid dark background so they stay readable on top of the log, fit their content, and can be closed with a **Close** button as well as Esc.
+- **Contribution reminder counts per realm.** The numbers behind the "share your deaths" reminder used to add up every realm on your account, so playing on another realm or region skewed them. They are now tracked per realm and recalculated once from your log.
+
+### Fixes
+- Fixed the **Refresh** button on the search tab sitting outside the window on wide layouts.
+- **Death alerts on brand-new accounts.** A new account can be silenced in custom chat channels for its first few days. The addon used to keep trying to send every few seconds without noticing. It now recognises the mute, waits, and picks up on its own once the mute is lifted. (DeathNotificationLib V29)
+- **Backup chat channel.** When the main death-alert channel could not be joined, every retry added another letter to the backup channel's name, so players could end up in different backup channels and not see each other. There is now a single fixed backup channel. (DeathNotificationLib V29)
+- **Offensive-name filter catches accented spellings.** Names that hid a slur behind accented letters, such as `Nïggér`, used to slip past the filter. Accents are now ignored when matching, and a few more spellings were added after checking them against real character names to make sure no legitimate name is caught. (ProfanityLib V3)
+
 ## [0.5.23] - 2026-08-12
 
 ### New Features

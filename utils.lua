@@ -749,6 +749,36 @@ function Deathlog_shouldShowEntry(entry)
 	return true
 end
 
+-- Realm per filtered entry, kept out of the entry itself so nothing new is
+-- persisted into every SavedVariables record.
+local entry_realm = setmetatable({}, { __mode = "k" })
+
+function Deathlog_getEntryRealm(entry)
+	return (entry and entry_realm[entry]) or GetRealmName()
+end
+
+function Deathlog_urlEncode(s)
+	return (tostring(s or ""):gsub("[^%w%-_%.~]", function(c)
+		return string.format("%%%02X", string.byte(c))
+	end))
+end
+
+Deathlog_DEATHMAP_LOGO = "Interface\\AddOns\\Deathlog\\Media\\deathmap_logo.png"
+
+function Deathlog_deathmapUrl(player_data)
+	if not player_data or not player_data["name"] then return nil end
+	local url = "https://wowdeathmap.com/character/"
+		.. Deathlog_urlEncode(Deathlog_getEntryRealm(player_data)) .. "/"
+		.. Deathlog_urlEncode(player_data["name"])
+	local params = {}
+	local date = tonumber(player_data["date"])
+	if date and date > 0 then
+		params[#params + 1] = "d=" .. math.floor(date)
+	end
+	params[#params + 1] = "source_addon=deathlog"
+	return url .. "?" .. table.concat(params, "&")
+end
+
 function DeathlogFilter(_deathlog_data, filter)
 	local filtered_death_log = {}
 	for server_name, entry_tbl in pairs(_deathlog_data) do
@@ -759,6 +789,7 @@ function DeathlogFilter(_deathlog_data, filter)
 			Deathlog_YieldCheck()
 			if Deathlog_shouldShowEntry(entry) and filter(server_name, entry) then
 				filtered_death_log[server_name][checksum] = entry
+				entry_realm[entry] = server_name
 			end
 		end
 	end
@@ -1942,6 +1973,15 @@ function Deathlog_addContextMenuReportItems(player_data)
 		UIDropDownMenu_AddButton(info)
 	end
 
+	if targets.name then
+		addButton("Copy Deathmap URL", function()
+			-- Uploads lag the in-game death, so a fresh one may not resolve yet.
+			Deathlog_ShowCopyPopup(Deathlog_deathmapUrl(player_data),
+				"Recent deaths can take a few minutes to show up on the website.",
+				player_data["name"], Deathlog_DEATHMAP_LOGO)
+		end)
+	end
+
 	-- The dead player's own name is only worth reporting when nobody else was
 	-- named as the reporter — a third-party report points at the sender instead.
 	if targets.name and not reported_by_third_party then
@@ -2454,10 +2494,10 @@ local deathlog_copy_popup = nil
 
 --- Show a small popup with an EditBox for easy copying.
 ---@param text string
-function Deathlog_ShowCopyPopup(text)
+function Deathlog_ShowCopyPopup(text, note, title, icon, subtitle)
 	if not deathlog_copy_popup then
 		local popup = CreateFrame("Frame", "DeathlogCopyPopupFrame", UIParent, "BackdropTemplate")
-		popup:SetSize(320, 120)
+		popup:SetSize(320, 132)
 		popup:SetPoint("CENTER", UIParent, "CENTER", 0, 40)
 		popup:SetFrameStrata("TOOLTIP")
 		popup:SetToplevel(true)
@@ -2467,43 +2507,87 @@ function Deathlog_ShowCopyPopup(text)
 		popup:SetScript("OnDragStart", popup.StartMoving)
 		popup:SetScript("OnDragStop", popup.StopMovingOrSizing)
 		popup:SetBackdrop({
-			bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+			bgFile = "Interface\\Buttons\\WHITE8x8",
 			edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-			tile = true,
-			tileSize = 32,
+			tile = false,
 			edgeSize = 32,
 			insets = { left = 8, right = 8, top = 8, bottom = 8 },
 		})
+		popup:SetBackdropColor(0.05, 0.06, 0.10, 0.96)
 
-		local title = popup:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-		title:SetPoint("TOP", popup, "TOP", 0, -16)
-		title:SetText("Press Ctrl+C to copy")
+		local titleText = popup:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+		titleText:SetPoint("TOP", popup, "TOP", 0, -16)
+		popup.title = titleText
+
+		local logo = popup:CreateTexture(nil, "ARTWORK")
+		logo:SetSize(24, 24)
+		logo:SetPoint("RIGHT", titleText, "LEFT", -6, 0)
+		logo:Hide()
+		popup.logo = logo
+
+		local subtitle = popup:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+		subtitle:SetPoint("TOP", titleText, "BOTTOM", 0, -4)
+		subtitle:SetJustifyH("CENTER")
+		popup.subtitle = subtitle
 
 		local close = CreateFrame("Button", nil, popup, "UIPanelCloseButton")
 		close:SetPoint("TOPRIGHT", popup, "TOPRIGHT", -4, -4)
 
 		local editBox = CreateFrame("EditBox", nil, popup, "InputBoxTemplate")
 		editBox:SetAutoFocus(true)
-		editBox:SetSize(220, 30)
-		editBox:SetPoint("CENTER", popup, "CENTER", 0, -6)
+		editBox:SetSize(240, 30)
+		editBox:SetPoint("TOP", subtitle, "BOTTOM", 0, -8)
 		editBox:SetScript("OnEscapePressed", function(self)
 			self:ClearFocus()
 			popup:Hide()
 		end)
 		popup.editBox = editBox
 
-		local hint = popup:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-		hint:SetPoint("BOTTOM", popup, "BOTTOM", 0, 12)
-		hint:SetText("Esc to close")
+		local noteText = popup:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+		noteText:SetPoint("TOP", editBox, "BOTTOM", 0, -6)
+		noteText:SetWidth(280)
+		noteText:SetJustifyH("CENTER")
+		noteText:SetTextColor(0.8, 0.8, 0.8, 0.9)
+		popup.note = noteText
+
+		local closeBtn = CreateFrame("Button", nil, popup, "UIPanelButtonTemplate")
+		closeBtn:SetSize(100, 22)
+		closeBtn:SetPoint("BOTTOM", popup, "BOTTOM", 0, 14)
+		closeBtn:SetText("Close")
+		for _, tex in ipairs({ closeBtn:GetNormalTexture(), closeBtn:GetPushedTexture(), closeBtn:GetHighlightTexture() }) do
+			if tex then tex:SetVertexColor(1, 0.3, 0.3) end
+		end
+		closeBtn:SetScript("OnClick", function()
+			editBox:ClearFocus()
+			popup:Hide()
+		end)
 
 		popup:Hide()
 		deathlog_copy_popup = popup
 	end
 
-	local value = text or ""
-	deathlog_copy_popup.editBox:SetText(value)
-	deathlog_copy_popup.editBox:HighlightText()
-	deathlog_copy_popup:Show()
-	deathlog_copy_popup:Raise()
-	deathlog_copy_popup.editBox:SetFocus()
+	local popup = deathlog_copy_popup
+	local hasTitle = title ~= nil and title ~= ""
+	local hasNote = note ~= nil and note ~= ""
+	local hasIcon = icon ~= nil and icon ~= ""
+	if hasIcon then popup.logo:SetTexture(icon) end
+	popup.logo:SetShown(hasIcon)
+	popup.title:SetText(hasTitle and title or "Press Ctrl+C to copy")
+	local sub = subtitle
+		or (hasIcon and "View this death on wowdeathmap.com\nCtrl+C to copy the link")
+		or (hasTitle and "Press Ctrl+C to copy")
+		or ""
+	popup.subtitle:SetText(sub)
+	popup.editBox:SetText(text or "")
+	popup.editBox:HighlightText()
+	popup.note:SetText(note or "")
+	popup.note:SetShown(hasNote)
+	local h = 16 + popup.title:GetStringHeight()
+	if sub ~= "" then h = h + 4 + popup.subtitle:GetStringHeight() end
+	h = h + 8 + 30
+	if hasNote then h = h + 6 + popup.note:GetStringHeight() end
+	popup:SetHeight(h + 10 + 22 + 14)
+	popup:Show()
+	popup:Raise()
+	popup.editBox:SetFocus()
 end

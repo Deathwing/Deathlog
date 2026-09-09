@@ -40,6 +40,13 @@ local function initVariables()
 	end
 	deathlog_record_econ_stats = deathlog_record_econ_stats or {}
 	deathlog_entry_counts = deathlog_entry_counts or {}
+	-- Pre-realm flat counters are stale once counts are per realm; they get
+	-- recomputed from deathlog_data on first load, so drop the old scalars.
+	for k, v in pairs(deathlog_entry_counts) do
+		if type(v) ~= "table" then
+			deathlog_entry_counts[k] = nil
+		end
+	end
 	deathlog_purged = deathlog_purged or {}
 	deathlog_entry_origin = deathlog_entry_origin or {}
 	deathlog_ignored_senders = deathlog_ignored_senders or {}
@@ -177,35 +184,41 @@ local function loadWidgets()
 	end
 end
 
+function Deathlog_EntryCounts()
+	local realm = GetRealmName()
+	if not realm then
+		return nil
+	end
+	deathlog_entry_counts[realm] = deathlog_entry_counts[realm] or {}
+	return deathlog_entry_counts[realm]
+end
+
 --- Initialize entry counters from existing data on first load.
 --- Classifies legacy entries by inspecting available fields:
 ---   - Has both class_id and race_id → "self_death" (older clients only had addon-reported deaths with full data)
 ---   - Missing class_id or race_id → "blizzard" (Blizzard's HARDCORE_DEATHS channel reports lack these fields)
 local function initEntryCounters()
-	if deathlog_entry_counts["initialized"] then
+	local counts = Deathlog_EntryCounts()
+	if not counts or counts["initialized"] then
 		return
 	end
 
 	local total = 0
 	local self_death = 0
 	local blizzard = 0
-	for _, entries in pairs(deathlog_data) do
-		if type(entries) == "table" then
-			for _, entry in pairs(entries) do
-				total = total + 1
-				if entry["class_id"] and entry["race_id"] then
-					self_death = self_death + 1
-				else
-					blizzard = blizzard + 1
-				end
-			end
+	for _, entry in pairs(deathlog_data[GetRealmName()] or {}) do
+		total = total + 1
+		if entry["class_id"] and entry["race_id"] then
+			self_death = self_death + 1
+		else
+			blizzard = blizzard + 1
 		end
 	end
 
-	deathlog_entry_counts[SOURCE.SELF_DEATH] = self_death
-	deathlog_entry_counts[SOURCE.BLIZZARD] = blizzard
-	deathlog_entry_counts["total"] = total
-	deathlog_entry_counts["initialized"] = true
+	counts[SOURCE.SELF_DEATH] = self_death
+	counts[SOURCE.BLIZZARD] = blizzard
+	counts["total"] = total
+	counts["initialized"] = true
 end
 
 function Deathlog_LoadFromHardcore()
@@ -409,9 +422,10 @@ local function newEntry(_player_data, _checksum, num_peer_checks, in_guild, sour
 	deathlog_data_map[realmName][player_name] = modified_checksum
 
 	source = source or SOURCE.UNKNOWN
-	if deathlog_entry_counts then
-		deathlog_entry_counts[source] = (deathlog_entry_counts[source] or 0) + 1
-		deathlog_entry_counts["total"] = (deathlog_entry_counts["total"] or 0) + 1
+	local counts = Deathlog_EntryCounts()
+	if counts then
+		counts[source] = (counts[source] or 0) + 1
+		counts["total"] = (counts["total"] or 0) + 1
 	end
 end
 

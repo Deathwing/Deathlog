@@ -29,6 +29,22 @@ local NO_CHANGELOG_VERSIONS = {
 local CHANGELOG_CONTENT = [[
 |cFFFFD700Deathlog Changelog|r
 
+|cFF00FF00[0.5.24] - 2026-09-09|r
+
+|cFFFFFFFFNew Features|r
+- Deathmap links: right-click a death in the log or mini log and pick 'Copy Deathmap URL' to get a link to that character on wowdeathmap.com, opened directly at that death. Very recent deaths can take a few minutes to show up on the site
+- 'View on wowdeathmap.com' badge at the bottom of the main window. Click it to copy a link to the live map of all deaths
+
+|cFFFFFFFFImprovements|r
+- The little windows that hand you a link to copy (Discord invite, Deathmap links) now have a solid dark background, fit their content, and can be closed with a Close button as well as Esc
+- The numbers behind the 'share your deaths' reminder are now tracked per realm. They used to add up every realm on your account, which skewed them after playing elsewhere
+
+|cFFFFFFFFFixes|r
+- The Refresh button on the search tab no longer sits outside the window on wide layouts
+- Death alerts on brand-new accounts: a new account can be silenced in custom chat channels for its first few days. The addon now recognises the mute, waits, and picks up on its own once it is lifted instead of retrying every few seconds
+- When the main death-alert channel could not be joined, every retry used to add another letter to the backup channel's name, so players could end up in different backup channels. There is now a single fixed backup channel
+- The offensive-name filter now ignores accents, so names that hid a slur behind accented letters no longer slip past. A few more spellings were added after checking them against real character names
+
 |cFF00FF00[0.5.23] - 2026-08-12|r
 
 |cFFFFFFFFNew Features|r

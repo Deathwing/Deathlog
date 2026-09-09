@@ -2010,7 +2010,8 @@ local function drawLogTab(container)
 	end
 
 	font_container.refresh_button:ClearAllPoints()
-	font_container.refresh_button:SetPoint("RIGHT", font_container.next_button, "RIGHT", 464, 0)
+	font_container.refresh_button:SetPoint("TOP", font_container.next_button, "TOP", 0, 0)
+	font_container.refresh_button:SetPoint("RIGHT", deathlog_group.frame, "RIGHT", 0, 0)
 	font_container.refresh_button:SetScript("OnClick", function()
 		clearDeathlogMenuLogData(true)
 		setDeathlogMenuLogData(DeathlogFilter(_deathlog_data, filter))
@@ -2774,6 +2775,52 @@ local function createDeathlogMenu()
 			Deathlog_ShowCopyPopup("discord.gg/TrJFGcah7z")
 		end)
 		ace_deathlog_menu.contact_button = contact_btn
+	end
+
+	if ace_deathlog_menu.deathmap_footer == nil then
+		local footer = CreateFrame("Button", nil, ace_deathlog_menu.frame, "BackdropTemplate")
+		footer:SetSize(150, 26)
+		footer:SetPoint("BOTTOM", ace_deathlog_menu.frame, "BOTTOM", 0, 8)
+		footer:SetFrameLevel(ace_deathlog_menu.frame:GetFrameLevel() + 10)
+		footer:SetBackdrop({
+			bgFile = "Interface\\Buttons\\WHITE8x8",
+			edgeFile = "Interface\\Buttons\\WHITE8x8",
+			edgeSize = 1,
+		})
+		footer:SetBackdropColor(0.04, 0.06, 0.12, 0.9)
+		footer:SetBackdropBorderColor(0.85, 0.65, 0.2, 0.6)
+
+		local logo = footer:CreateTexture(nil, "ARTWORK")
+		logo:SetSize(20, 20)
+		logo:SetPoint("LEFT", footer, "LEFT", 4, 0)
+		logo:SetTexture(Deathlog_DEATHMAP_LOGO)
+
+		local label = footer:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+		label:SetFont(Deathlog_L.menu_font, 13)
+		label:SetPoint("LEFT", logo, "RIGHT", 6, 0)
+		label:SetTextColor(0.95, 0.8, 0.35, 1)
+		label:SetText("View on wowdeathmap.com")
+		footer:SetWidth(4 + 20 + 6 + label:GetStringWidth() + 14)
+
+		footer:SetScript("OnEnter", function(self)
+			self:SetBackdropBorderColor(1, 0.8, 0.3, 1)
+			GameTooltip:SetOwner(self, "ANCHOR_TOP")
+			GameTooltip:AddLine("Deathmap", 1, 0.8, 0)
+			GameTooltip:AddLine("See these deaths on the live map.", 0.9, 0.9, 0.9)
+			GameTooltip:AddLine("Click to copy the link.", 0.7, 0.7, 0.7)
+			GameTooltip:Show()
+		end)
+		footer:SetScript("OnLeave", function(self)
+			self:SetBackdropBorderColor(0.85, 0.65, 0.2, 0.6)
+			GameTooltip:Hide()
+		end)
+		footer:SetScript("OnClick", function()
+			Deathlog_ShowCopyPopup("https://wowdeathmap.com/?source_addon=deathlog",
+				"Every fall in Azeroth, projected onto the map and contributed by players like you.",
+				"Deathmap", Deathlog_DEATHMAP_LOGO,
+				"The Hardcore death archive\nCtrl+C to copy the link")
+		end)
+		ace_deathlog_menu.deathmap_footer = footer
 	end
 
 	if ace_deathlog_menu.footer_source_kind_dd == nil then
