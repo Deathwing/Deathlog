@@ -39,21 +39,24 @@ local function createDeadliestCreaturesEntry()
 	frame.background:SetWidth(20)
 	frame.background:Show()
 
-	frame.creature_name = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-	frame.creature_name:SetPoint("LEFT", frame, "LEFT", 10, 0)
-	frame.creature_name:SetFont(Deathlog_L.deadliest_creature_container_font, 14, "OUTLINE")
-	frame.creature_name:SetTextColor(0.9, 0.9, 0.9)
-	frame.creature_name:SetText("AAA")
-	frame.creature_name:SetJustifyH("LEFT")
-	frame.creature_name:SetWidth(150)
-	frame.creature_name:SetWordWrap(false)
-	frame.creature_name:Show()
-
 	frame.num_kills_text = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 	frame.num_kills_text:SetPoint("RIGHT", frame, "RIGHT", 0, 0)
 	frame.num_kills_text:SetText("")
 	frame.num_kills_text:SetJustifyH("RIGHT")
 	frame.num_kills_text:Show()
+
+	-- The name is bounded by the kills text rather than a fixed width, so a
+	-- long name ("Vile Fin Minor Oracle") is cut with "..." instead of
+	-- running into the number.
+	frame.creature_name = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+	frame.creature_name:SetPoint("LEFT", frame, "LEFT", 10, 0)
+	frame.creature_name:SetPoint("RIGHT", frame.num_kills_text, "LEFT", -6, 0)
+	frame.creature_name:SetFont(Deathlog_L.deadliest_creature_container_font, 14, "OUTLINE")
+	frame.creature_name:SetTextColor(0.9, 0.9, 0.9)
+	frame.creature_name:SetText("AAA")
+	frame.creature_name:SetJustifyH("LEFT")
+	frame.creature_name:SetWordWrap(false)
+	frame.creature_name:Show()
 
 	frame.SetBackgroundWidth = function(self, width)
 		self.background:SetWidth(width)

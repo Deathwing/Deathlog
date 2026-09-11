@@ -537,6 +537,13 @@ local function handleEvent(self, event, ...)
 		-- Write project id into settings
 		deathlog_settings["wow_project_id"] = WOW_PROJECT_ID
 
+		-- Deathlog owns the death alert UI. Other addons also attach to DNL with
+		-- their own settings table (e.g. Deathmap Live Tracker, for addonless
+		-- logging); without an explicit priority the owner was decided by
+		-- pairs() order, and when the other addon won, the DeathAlert panel
+		-- read and wrote a table that is never saved, so every alert setting
+		-- reset on /reload.
+		deathlog_settings["death_alert_priority"] = 10
 		deathlog_settings["DeathAlert"] = deathlog_settings["DeathAlert"] or {}
 		deathlog_settings["DeathAlert"]["death_alert_options_parent"] = "Deathlog"
 		deathlog_settings["DeathAlert"]["alertFilter"] = function(player_data)

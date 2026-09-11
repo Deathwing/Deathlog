@@ -28,11 +28,14 @@ local class_font = Deathlog_L.class_font
 
 local class_tbl = Deathlog_class_tbl
 
+-- { header, x offset, justify, cell width }. Cells must not overlap: the
+-- bundled database has 1.5M deaths, so "#" holds up to 7 digits (abbreviated
+-- by Deathlog_FormatCount) and "%" can be "100.0%".
 local average_class_subtitles = {
-	{ "Class", 20, "LEFT", 60 },
-	{ "#", 50, "RIGHT", 40 },
-	{ "%", 90, "RIGHT", 50 },
-	{ "Avg.", 130, "RIGHT", 50 },
+	{ "Class", 8, "LEFT", 62 },
+	{ "#", 70, "RIGHT", 52 },
+	{ "%", 126, "RIGHT", 52 },
+	{ "Avg.", 180, "RIGHT", 36 },
 }
 
 local average_class_header_font_strings = {}
@@ -41,7 +44,7 @@ for _, v in ipairs(average_class_subtitles) do
 	average_class_header_font_strings[v[1]]:SetPoint("TOPLEFT", average_class_container, "TOPLEFT", v[2], 2)
 	average_class_header_font_strings[v[1]]:SetFont(class_font, 15, "")
 	average_class_header_font_strings[v[1]]:SetJustifyH(v[3])
-	average_class_header_font_strings[v[1]]:SetWidth(50)
+	average_class_header_font_strings[v[1]]:SetWidth(v[4])
 	average_class_header_font_strings[v[1]]:SetText(v[1])
 end
 
@@ -61,7 +64,7 @@ for k, class_id in pairs(class_tbl) do
 		)
 		average_class_font_strings[class_id][v[1]]:SetFont(class_font, 14, "")
 		average_class_font_strings[class_id][v[1]]:SetJustifyH(v[3])
-		average_class_font_strings[class_id][v[1]]:SetWidth(50)
+		average_class_font_strings[class_id][v[1]]:SetWidth(v[4])
 		average_class_font_strings[class_id][v[1]]:SetTextColor(1, 1, 1, 1)
 		average_class_font_strings[class_id][v[1]]:SetWordWrap(false)
 	end
@@ -74,8 +77,9 @@ for _, v in ipairs(average_class_subtitles) do
 	average_class_font_strings["all"][v[1]]:SetPoint("TOPLEFT", average_class_container, "TOPLEFT", v[2], sep + 5)
 	average_class_font_strings["all"][v[1]]:SetFont(class_font, 14, "")
 	average_class_font_strings["all"][v[1]]:SetJustifyH(v[3])
-	average_class_font_strings["all"][v[1]]:SetWidth(50)
+	average_class_font_strings["all"][v[1]]:SetWidth(v[4])
 	average_class_font_strings["all"][v[1]]:SetTextColor(1, 1, 1, 1)
+	average_class_font_strings["all"][v[1]]:SetWordWrap(false)
 end
 
 local getFilteredClassEntry = Deathlog_getFilteredClassEntry
@@ -109,8 +113,8 @@ function average_class_container.updateMenuElement(scroll_frame, current_map_id,
 
 	average_class_container:SetParent(scroll_frame.frame)
 	average_class_container:ClearAllPoints()
-	average_class_container:SetPoint("TOPLEFT", scroll_frame.frame, "TOPLEFT", 820, -65)
-	average_class_container:SetWidth(200)
+	average_class_container:SetPoint("TOPLEFT", scroll_frame.frame, "TOPLEFT", 808, -65)
+	average_class_container:SetWidth(220)
 	average_class_container:SetHeight(200)
 
 	if average_class_container.heading == nil then
@@ -159,7 +163,7 @@ function average_class_container.updateMenuElement(scroll_frame, current_map_id,
 			end
 			entry_data[class_id] = {}
 			entry_data[class_id]["Class"] = class_str
-			entry_data[class_id]["#"] = v["num_entries"]
+			entry_data[class_id]["#"] = Deathlog_FormatCount(v["num_entries"])
 			if total_map_entry["num_entries"] > 0 then
 				entry_data[class_id]["%"] = string.format(
 					"%.1f",
@@ -191,7 +195,7 @@ function average_class_container.updateMenuElement(scroll_frame, current_map_id,
 			end
 			entry_data[class_id] = {}
 			entry_data[class_id]["Class"] = class_str
-			entry_data[class_id]["#"] = v["num_entries"]
+			entry_data[class_id]["#"] = Deathlog_FormatCount(v["num_entries"])
 			if total_creature_entry["num_entries"] > 0 then
 				entry_data[class_id]["%"] = string.format(
 					"%.1f",

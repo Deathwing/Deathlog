@@ -30,14 +30,17 @@ local class_font = Deathlog_L.class_font
 local class_tbl = Deathlog_class_tbl
 
 local steps = MAX_PLAYER_LEVEL / 10
+-- { header, x offset, justify, cell width }. Cells are spaced so a 14pt
+-- value never reaches the next column: counts are abbreviated by
+-- Deathlog_FormatCount and milestone probabilities use one decimal.
 local average_class_subtitles = {
-	{ "Class", 20, "LEFT", 60 },
-	{ "# Deaths", 80, "LEFT", 40 },
-	{ "% of all", 150, "LEFT", 50 },
-	{ "Avg. Lvl.", 200, "LEFT", 50 },
+	{ "Class", 20, "LEFT", 62 },
+	{ "# Deaths", 86, "LEFT", 64 },
+	{ "% of all", 154, "LEFT", 60 },
+	{ "Avg. Lvl.", 218, "LEFT", 62 },
 }
 for i = 1, steps do
-	table.insert(average_class_subtitles, { tostring(i * 10), 280 + (i - 1) * 50, "LEFT", 50 })
+	table.insert(average_class_subtitles, { tostring(i * 10), 290 + (i - 1) * 50, "LEFT", 46 })
 end
 
 local average_class_header_font_strings = {}
@@ -68,7 +71,7 @@ for k, class_id in pairs(class_tbl) do
 		)
 		average_class_font_strings[class_id][v[1]]:SetFont(class_font, 14, "")
 		average_class_font_strings[class_id][v[1]]:SetJustifyH(v[3])
-		average_class_font_strings[class_id][v[1]]:SetWidth(50)
+		average_class_font_strings[class_id][v[1]]:SetWidth(v[4])
 		average_class_font_strings[class_id][v[1]]:SetTextColor(1, 1, 1, 1)
 		average_class_font_strings[class_id][v[1]]:SetWordWrap(false)
 	end
@@ -88,8 +91,9 @@ for _, v in ipairs(average_class_subtitles) do
 	)
 	average_class_font_strings["all"][v[1]]:SetFont(class_font, 14, "")
 	average_class_font_strings["all"][v[1]]:SetJustifyH(v[3])
-	average_class_font_strings["all"][v[1]]:SetWidth(100)
+	average_class_font_strings["all"][v[1]]:SetWidth(v[4])
 	average_class_font_strings["all"][v[1]]:SetTextColor(1, 1, 1, 1)
+	average_class_font_strings["all"][v[1]]:SetWordWrap(false)
 end
 
 local getFilteredClassEntry = Deathlog_getFilteredClassEntry
@@ -302,7 +306,7 @@ function class_stat_comparison_container.updateMenuElement(
 			end
 			entry_data[class_id] = {}
 			entry_data[class_id]["Class"] = class_str
-			entry_data[class_id]["# Deaths"] = v["num_entries"]
+			entry_data[class_id]["# Deaths"] = Deathlog_FormatCount(v["num_entries"])
 			if total_map_entry and total_map_entry["num_entries"] > 0 then
 				entry_data[class_id]["% of all"] = string.format(
 					"%.1f",
@@ -316,7 +320,7 @@ function class_stat_comparison_container.updateMenuElement(
 			for i = 1, steps do
 				local value = getCurveValue(cdf, i * 10)
 				if value ~= nil then
-					entry_data[class_id][tostring(i * 10)] = string.format("%.2f", value) .. "%"
+					entry_data[class_id][tostring(i * 10)] = string.format("%.1f", value) .. "%"
 				else
 					entry_data[class_id][tostring(i * 10)] = "-"
 				end

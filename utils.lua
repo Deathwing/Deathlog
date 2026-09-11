@@ -757,6 +757,23 @@ function Deathlog_getEntryRealm(entry)
 	return (entry and entry_realm[entry]) or GetRealmName()
 end
 
+--- Format a death count for a narrow table cell. Counts below 100k stay
+--- exact; larger ones are abbreviated ("889k", "1.55M") so 6-7 digit totals
+--- from the bundled database no longer run into the neighbouring column.
+---@param n number|string|nil
+---@return string
+function Deathlog_FormatCount(n)
+	n = tonumber(n)
+	if n == nil then return "-" end
+	local a = math.abs(n)
+	if a >= 1e6 then
+		return string.format("%.2fM", n / 1e6)
+	elseif a >= 1e5 then
+		return string.format("%.0fk", n / 1e3)
+	end
+	return tostring(math.floor(n + 0.5))
+end
+
 function Deathlog_urlEncode(s)
 	return (tostring(s or ""):gsub("[^%w%-_%.~]", function(c)
 		return string.format("%%%02X", string.byte(c))

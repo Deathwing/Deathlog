@@ -33,13 +33,13 @@ local green_shade = "ff50c878"
 
 local steps = MAX_PLAYER_LEVEL / 10
 local average_class_subtitles = {
-	{ "Class", 20, "LEFT", 60 },
-	{ "# Deaths", 80, "LEFT", 40 },
-	{ "% of all", 150, "LEFT", 50 },
-	{ "Avg. Lvl.", 200, "LEFT", 50 },
+	{ "Class", 20, "LEFT", 62 },
+	{ "# Deaths", 86, "LEFT", 64 },
+	{ "% of all", 154, "LEFT", 60 },
+	{ "Avg. Lvl.", 218, "LEFT", 62 },
 }
 for i = 1, steps do
-	table.insert(average_class_subtitles, { tostring(i * 10), 280 + (i - 1) * 50, "LEFT", 50 })
+	table.insert(average_class_subtitles, { tostring(i * 10), 290 + (i - 1) * 50, "LEFT", 46 })
 end
 
 local average_class_header_font_strings = {}
@@ -69,7 +69,7 @@ for k, class_id in pairs(class_tbl) do
 		)
 		average_class_font_strings[class_id][v[1]]:SetFont(class_font, 14, "")
 		average_class_font_strings[class_id][v[1]]:SetJustifyH(v[3])
-		average_class_font_strings[class_id][v[1]]:SetWidth(50)
+		average_class_font_strings[class_id][v[1]]:SetWidth(v[4])
 		average_class_font_strings[class_id][v[1]]:SetTextColor(1, 1, 1, 1)
 		average_class_font_strings[class_id][v[1]]:SetWordWrap(false)
 	end
@@ -82,8 +82,9 @@ for _, v in ipairs(average_class_subtitles) do
 	average_class_font_strings["all"][v[1]]:SetPoint("TOPLEFT", average_class_container, "TOPLEFT", v[2], sep + 5)
 	average_class_font_strings["all"][v[1]]:SetFont(class_font, 14, "")
 	average_class_font_strings["all"][v[1]]:SetJustifyH(v[3])
-	average_class_font_strings["all"][v[1]]:SetWidth(100)
+	average_class_font_strings["all"][v[1]]:SetWidth(v[4])
 	average_class_font_strings["all"][v[1]]:SetTextColor(1, 1, 1, 1)
+	average_class_font_strings["all"][v[1]]:SetWordWrap(false)
 end
 
 local getFilteredClassEntry = Deathlog_getFilteredClassEntry
@@ -306,9 +307,9 @@ function average_class_container.updateMenuElement(scroll_frame, inc_class_id, s
 
 		local death_delta = s_class_info["# Deaths"] - v["num_entries"]
 		if death_delta > 0 then
-			entry_data[class_id]["# Deaths"] = "|c" .. green_shade .. "+" .. tostring(death_delta) .. "|r"
+			entry_data[class_id]["# Deaths"] = "|c" .. green_shade .. "+" .. Deathlog_FormatCount(death_delta) .. "|r"
 		else
-			entry_data[class_id]["# Deaths"] = "|cffff0000" .. tostring(death_delta) .. "|r"
+			entry_data[class_id]["# Deaths"] = "|cffff0000" .. Deathlog_FormatCount(death_delta) .. "|r"
 		end
 
 		local class_pct = nil

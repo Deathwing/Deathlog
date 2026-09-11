@@ -2,6 +2,12 @@
 
 All notable changes to Deathlog will be documented in this file.
 
+## [0.5.25] - 2026-09-11
+
+### Fixes
+- **Statistics tables no longer overlap.** Death counts, percentages and class names in the statistics tabs ran into each other now that the database holds over 1.5 million deaths. Columns have proper spacing, and large counts are shown as `889k` or `1.55M`. ([#7](https://github.com/Deathwing/Deathlog/issues/7), thanks @Lairo)
+- **Tidier update window.** The download buttons no longer stick out of the "update available" window, and CurseForge is preselected.
+
 ## [0.5.24] - 2026-09-09
 
 ### New Features

@@ -17,8 +17,8 @@ You should have received a copy of the GNU General Public License
 along with the Deathlog AddOn. If not, see <http://www.gnu.org/licenses/>.
 --]]
 local SOURCES = {
-	{ name = "GitHub", url = "https://github.com/Deathwing/Deathlog/releases/latest" },
 	{ name = "CurseForge", url = "https://www.curseforge.com/wow/addons/deathlog" },
+	{ name = "GitHub", url = "https://github.com/Deathwing/Deathlog/releases/latest" },
 	{ name = "Wago", url = "https://addons.wago.io/addons/deathlog" },
 	{ name = "WoWInterface", url = "https://www.wowinterface.com/downloads/info27170-Deathlog.html" },
 }
@@ -58,7 +58,15 @@ end
 
 local function createSourceFrame()
 	local frame = CreateFrame("Frame", "DeathlogUpdateSourcesFrame", UIParent, "BackdropTemplate")
-	frame:SetSize(460, 190)
+	-- Sources are laid out in a grid of BUTTONS_PER_ROW columns; the dialog
+	-- is sized from that grid so no button can hang outside it.
+	local BUTTONS_PER_ROW, BUTTON_WIDTH, BUTTON_HEIGHT = 2, 170, 28
+	local COL_GAP, ROW_GAP = 10, 6
+	local rows = math.ceil(#SOURCES / BUTTONS_PER_ROW)
+	local grid_width = BUTTONS_PER_ROW * BUTTON_WIDTH + (BUTTONS_PER_ROW - 1) * COL_GAP
+	local grid_height = rows * BUTTON_HEIGHT + (rows - 1) * ROW_GAP
+	local frame_width = grid_width + 100
+	frame:SetSize(frame_width, 200) -- height is set below once the text is measured
 	frame:SetPoint("CENTER")
 	frame:SetFrameStrata("DIALOG")
 	frame:SetClampedToScreen(true)
@@ -86,31 +94,38 @@ local function createSourceFrame()
 
 	local description = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
 	description:SetPoint("TOP", title, "BOTTOM", 0, -10)
+	description:SetWidth(frame_width - 50)
+	description:SetJustifyH("CENTER")
 	description:SetText("Choose an official download source, then copy the selected address.")
 
+	-- top margin + title + gap + description + gap + grid + gap + address box + bottom margin
+	frame:SetHeight(22 + title:GetStringHeight() + 10 + description:GetStringHeight() + 20
+		+ grid_height + 24 + 28 + 24)
+
 	local editBox = CreateFrame("EditBox", nil, frame, "InputBoxTemplate")
-	editBox:SetSize(400, 28)
+	editBox:SetSize(grid_width + 20, 28)
 	editBox:SetPoint("BOTTOM", 0, 24)
 	editBox:SetAutoFocus(false)
 	editBox:SetScript("OnEscapePressed", editBox.ClearFocus)
 	frame.editBox = editBox
 
-	local previousButton
-	for _, source in ipairs(SOURCES) do
-		local button = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-		button:SetSize(120, 28)
-		if previousButton then
-			button:SetPoint("LEFT", previousButton, "RIGHT", 10, 0)
-		else
-			button:SetPoint("TOPLEFT", 35, -82)
-		end
+	local grid = CreateFrame("Frame", nil, frame)
+	grid:SetSize(grid_width, grid_height)
+	grid:SetPoint("TOP", description, "BOTTOM", 0, -20)
+
+	for index, source in ipairs(SOURCES) do
+		local col = (index - 1) % BUTTONS_PER_ROW
+		local row = math.floor((index - 1) / BUTTONS_PER_ROW)
+		local button = CreateFrame("Button", nil, grid, "UIPanelButtonTemplate")
+		button:SetSize(BUTTON_WIDTH, BUTTON_HEIGHT)
+		button:SetPoint("TOPLEFT", grid, "TOPLEFT",
+			col * (BUTTON_WIDTH + COL_GAP), -row * (BUTTON_HEIGHT + ROW_GAP))
 		button:SetText(source.name)
 		button:SetScript("OnClick", function()
 			editBox:SetText(source.url)
 			editBox:SetFocus()
 			editBox:HighlightText()
 		end)
-		previousButton = button
 	end
 
 	editBox:SetText(SOURCES[1].url)
@@ -183,7 +198,7 @@ local function notifyNewerVersion(addonName, newVersion)
 	scheduleUpdatePopup(newVersion)
 	if warnedVersions[newVersion] then return end
 	warnedVersions[newVersion] = true
-	DEFAULT_CHAT_FRAME:AddMessage("|cffffff00[Deathlog]|r Official downloads are available from GitHub, CurseForge, and Wago. Type |cffffffff/dl update|r to choose a source.")
+	DEFAULT_CHAT_FRAME:AddMessage("|cffffff00[Deathlog]|r Official downloads are available from CurseForge, GitHub, and Wago. Type |cffffffff/dl update|r to choose a source.")
 end
 
 if DeathNotificationLib and DeathNotificationLib.HookOnNewerVersion then

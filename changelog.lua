@@ -29,6 +29,12 @@ local NO_CHANGELOG_VERSIONS = {
 local CHANGELOG_CONTENT = [[
 |cFFFFD700Deathlog Changelog|r
 
+|cFF00FF00[0.5.25] - 2026-09-11|r
+
+|cFFFFFFFFFixes|r
+- Statistics tables no longer overlap. Death counts, percentages and class names in the statistics tabs ran into each other now that the database holds over 1.5 million deaths. Columns have proper spacing, and large counts show as 889k or 1.55M (GitHub issue #7, thanks Lairo)
+- The download buttons no longer stick out of the 'update available' window, and CurseForge is preselected
+
 |cFF00FF00[0.5.24] - 2026-09-09|r
 
 |cFFFFFFFFNew Features|r
