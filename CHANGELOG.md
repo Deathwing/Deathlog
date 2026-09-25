@@ -2,6 +2,11 @@
 
 All notable changes to Deathlog will be documented in this file.
 
+## [0.5.26] - 2026-09-25
+
+### Improvements
+- Updated the CurseForge project ID for the addon's new project page.
+
 ## [0.5.25] - 2026-09-11
 
 ### Fixes
