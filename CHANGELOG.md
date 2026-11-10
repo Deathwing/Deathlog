@@ -2,6 +2,20 @@
 
 All notable changes to Deathlog will be documented in this file.
 
+## [0.6.0] - 2026-11-10
+
+### New Features
+- **World of Warcraft: Forever support.** Deathlog loads on Forever (Interface 16001) with Classic zones and instances, plus Forever's own zones (Mount Hyjal, Riverglades, Zephras Isle, Darkspear Islands, Shen'dralas), instances and creatures. The level cap follows the client. The precomputed statistics and heatmap packages load on Forever with Forever-only data, built only from Forever clients; until enough Forever deaths are collected, statistics and heatmaps on Forever are computed from your own log. The minimap button lines up with Forever's minimap, the colour picker shows opacity the right way round, and the creature ranking tooltip is added through `TooltipDataProcessor`, since Forever has no `OnTooltipSetUnit` script.
+- **One download on CurseForge.** The CurseForge file now carries DeathNotificationLib, ProfanityLib and the data packages inside the Deathlog folder. When a separately installed copy exists as well, the newest installed copy is used, and `/dl versions` shows the version actually in use and which copy it is. Separately installed copies released before this one (DeathNotificationLib V31 or earlier, ProfanityLib V3 or earlier, data packages from before this release) still take precedence, so update them. The separately installed DeathlogData and DeathNotificationLibData keep receiving nightly data updates between Deathlog releases.
+
+### Improvements
+- Updated the bundled LibDBIcon to r57 and the AceGUI colour picker to v29.
+
+### Fixes
+- **No Lua error from damage without a source.** Periodic damage whose caster is gone, such as the Cloud of Disease in Scholomance, no longer throws an error in DeathNotificationLib on every tick. ([DeathNotificationLib#1](https://github.com/Deathwing/DeathNotificationLib/issues/1), thanks @leozitor)
+- **Trade window.** The enchantment recorder now hooks the Trade button instead of replacing its click handler, and reads the enchantment from the right return value of `GetTradePlayerItemInfo`.
+- **Purge list lookup.** New entries arriving while the statistics are still being computed no longer error on the purge list.
+
 ## [0.5.26] - 2026-09-25
 
 ### Improvements

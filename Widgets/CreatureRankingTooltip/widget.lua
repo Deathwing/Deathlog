@@ -27,11 +27,36 @@ local widget_name = "Creature Ranking Tooltip"
 local creature_ranking = {}
 local creature_avg_lvl = {}
 
+-- TBC has TooltipDataProcessor but its GameTooltip still only fires OnTooltipSetUnit.
+local function hookTooltipSetUnit(callback)
+	if GameTooltip:HasScript("OnTooltipSetUnit") then
+		GameTooltip:HookScript("OnTooltipSetUnit", callback)
+	elseif TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall and Enum and Enum.TooltipDataType then
+		TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Unit, function(tooltip)
+			if tooltip == GameTooltip then
+				callback()
+			end
+		end)
+	end
+end
+
+local function getTooltipUnit()
+	if GameTooltip.GetUnit then
+		local name, unit = GameTooltip:GetUnit()
+		if name then
+			return name, unit
+		end
+	end
+	if TooltipUtil and TooltipUtil.GetDisplayedUnit then
+		return TooltipUtil.GetDisplayedUnit(GameTooltip)
+	end
+end
+
 function Deathlog_activateCreatureRankingTooltip()
 	if loaded_crt == false then
-		GameTooltip:HookScript("OnTooltipSetUnit", function()
-			local a, b = GameTooltip:GetUnit()
-			if UnitIsPlayer(b) then return end
+		hookTooltipSetUnit(function()
+			local a, b = getTooltipUnit()
+			if not a or (b and UnitIsPlayer(b)) then return end
 
 			if deathlog_settings[widget_name] and deathlog_settings[widget_name]["enable_crt"] then
 				if creature_ranking then

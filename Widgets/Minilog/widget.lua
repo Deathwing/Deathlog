@@ -124,7 +124,7 @@ local rmap = {
 	["Troll"] = { 0.5, 0.75, 0.25, 0.5 },
 	["Orc"] = { 0.75, 1, 0.25, 0.5 },
 }
-if GetExpansionLevel and GetExpansionLevel() >= 1 then
+if Deathlog_EXPANSION_LEVEL >= 1 then
 	rmap["BloodElf"] = { 0, 0.25, 0.5, 0.75 }
 	rmap["Draenei"] = { 0.25, 0.5, 0.5, 0.75 }
 end

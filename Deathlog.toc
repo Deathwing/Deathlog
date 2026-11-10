@@ -1,12 +1,12 @@
-## Interface: 20506, 11509
+## Interface: 20506, 16001, 11509
 ## Title: Deathlog
-## Notes: Only for Hardcore on classic era or Burning Crusade Anniversary servers.
+## Notes: Only for Hardcore on Classic Era, Burning Crusade Anniversary and World of Warcraft: Forever servers.
 ## IconTexture: Interface\AddOns\Deathlog\Media\logo.png
 ## Author: Deathwing, originally by Yazpad
 ## X-License: GNU GPL3
 ## X-Category: Leveling,Guild
 ## Category: Hardcore
-## Version: 0.5.26
+## Version: 0.6.0
 ## X-Website: https://github.com/Deathwing/Deathlog
 ## X-Repository: https://github.com/Deathwing/Deathlog
 ## X-Curse-Project-ID: 1711471
@@ -20,16 +20,47 @@
 ## DefaultState: enabled
 ## SavedVariables: deathlog_settings, deathlog_data, deathlog_data_map, deathlog_watchlist_entries, deathlog_record_econ_stats, deathlog_entry_counts, deathlog_purged, deathlog_precomputed, deathlog_entry_origin, deathlog_ignored_senders, deathlog_hidden_names
 ## SavedVariablesPerCharacter: deathlog_char_data
+# EMBED_PACKAGE ProfanityLibData
 # REMOVE_NEXT_LINE
 Libs/ProfanityLib/Data/ProfanityLibData.xml
+# EMBED_PACKAGE ProfanityLib
 # REMOVE_NEXT_LINE
 Libs/ProfanityLib/ProfanityLib.xml
+# EMBED_PACKAGE DeathNotificationLibData
 # REMOVE_NEXT_LINE
-Libs/DeathNotificationLib/Data/DeathNotificationLibData.xml
+Libs/DeathNotificationLib/Data/DeathNotificationLibData~Init.lua [AllowLoadGameType vanilla, tbc, camelot]
+# REMOVE_NEXT_LINE
+Libs/DeathNotificationLib/Data/Heatmaps/heatmap_vanilla.lua [AllowLoadGameType vanilla]
+# REMOVE_NEXT_LINE
+Libs/DeathNotificationLib/Data/Heatmaps/heatmap_tbc.lua [AllowLoadGameType tbc]
+# REMOVE_NEXT_LINE
+Libs/DeathNotificationLib/Data/Heatmaps/heatmap_forever.lua [AllowLoadGameType camelot][ExcludeLoadGameType standard, classic]
+# REMOVE_NEXT_LINE
+Libs/DeathNotificationLib/Data/DeathNotificationLibData~Tables.lua [AllowLoadGameType vanilla, tbc, camelot]
+# REMOVE_NEXT_LINE
+Libs/DeathNotificationLib/Data/DeathNotificationLibData~Finalizer.lua [AllowLoadGameType vanilla, tbc, camelot]
+# EMBED_PACKAGE DeathNotificationLib
 # REMOVE_NEXT_LINE
 Libs/DeathNotificationLib/DeathNotificationLib.xml
+# EMBED_PACKAGE DeathlogData
 # REMOVE_NEXT_LINE
-Data/DeathlogData.xml
+Data/DeathlogData~Init.lua [AllowLoadGameType vanilla, tbc, camelot]
+# REMOVE_NEXT_LINE
+Data/Stats/stat_vanilla.lua [AllowLoadGameType vanilla]
+# REMOVE_NEXT_LINE
+Data/Stats/stat_tbc.lua [AllowLoadGameType tbc]
+# REMOVE_NEXT_LINE
+Data/Stats/stat_forever.lua [AllowLoadGameType camelot][ExcludeLoadGameType standard, classic]
+# REMOVE_NEXT_LINE
+Data/Purges/purge_vanilla.lua [AllowLoadGameType vanilla]
+# REMOVE_NEXT_LINE
+Data/Purges/purge_tbc.lua [AllowLoadGameType tbc]
+# REMOVE_NEXT_LINE
+Data/Purges/purge_forever.lua [AllowLoadGameType camelot][ExcludeLoadGameType standard, classic]
+# REMOVE_NEXT_LINE
+Data/DeathlogData~Tables.lua [AllowLoadGameType vanilla, tbc, camelot]
+# REMOVE_NEXT_LINE
+Data/DeathlogData~Finalizer.lua [AllowLoadGameType vanilla, tbc, camelot]
 
 Localization/strings_cn.lua
 Localization/strings_de.lua

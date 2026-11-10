@@ -933,7 +933,7 @@ local overlay_info_tbc_overrides = {
 	},
 }
 
-if GetExpansionLevel and GetExpansionLevel() >= 1 then
+if Deathlog_EXPANSION_LEVEL >= 1 then
 	for mapID, data in pairs(overlay_info_tbc_overrides) do
 		overlay_info[mapID] = data
 	end

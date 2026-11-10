@@ -76,12 +76,16 @@ end
 
 local function EditBox_OnReceiveDrag(frame)
 	local self = frame.obj
-	local type, id, info = GetCursorInfo()
+	local type, id, info, extra = GetCursorInfo()
 	local name
 	if type == "item" then
 		name = info
 	elseif type == "spell" then
-		name = GetSpellInfo(id, info)
+		if C_Spell and C_Spell.GetSpellName then
+			name = C_Spell.GetSpellName(extra)
+		else
+			name = GetSpellInfo(id, info)
+		end
 	elseif type == "macro" then
 		name = GetMacroInfo(id)
 	end

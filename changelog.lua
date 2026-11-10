@@ -30,6 +30,17 @@ local NO_CHANGELOG_VERSIONS = {
 local CHANGELOG_CONTENT = [[
 |cFFFFD700Deathlog Changelog|r
 
+|cFF00FF00[0.6.0] - 2026-11-10|r
+
+|cFFFFFFFFNew Features|r
+- World of Warcraft: Forever support. Deathlog loads on Forever with Classic zones and instances plus Forever's own zones, instances and creatures. Statistics and heatmaps use Forever-only data once enough Forever deaths are collected, and your own log until then
+- The CurseForge download now carries DeathNotificationLib, ProfanityLib and the data packages inside the Deathlog folder. When a newer copy is also installed separately, the newest one is used; update separate copies from before this release. The separate DeathlogData and DeathNotificationLibData keep receiving nightly data updates. /dl versions shows which copy is in use
+
+|cFFFFFFFFFixes|r
+- Damage without a source, such as the Cloud of Disease in Scholomance, no longer throws an error on every tick (thanks leozitor)
+- The trade window enchantment recorder no longer replaces the Trade button's click handler and reads the right enchantment value
+- New entries arriving while the statistics are still being computed no longer error on the purge list
+
 |cFF00FF00[0.5.25] - 2026-09-11|r
 
 |cFFFFFFFFFixes|r

@@ -1,4 +1,4 @@
-## Interface: 20506, 11509
+## Interface: 20506, 16001, 11509
 ## Title: Deathlog Data
 ## Notes: Precomputed statistics data for Deathlog.
 ## IconTexture: Interface\AddOns\DeathlogData\Media\logo.png
@@ -19,6 +19,14 @@
 ## Category-ruRU: Библиотеки
 ## Category-zhCN: 函数库
 ## Category-zhTW: 函式庫
-## Version: 1.0.0
+## Version: 10001
 
-DeathlogData.xml
+DeathlogData~Init.lua [AllowLoadGameType vanilla, tbc, camelot]
+Stats/stat_vanilla.lua [AllowLoadGameType vanilla]
+Stats/stat_tbc.lua [AllowLoadGameType tbc]
+Stats/stat_forever.lua [AllowLoadGameType camelot][ExcludeLoadGameType standard, classic]
+Purges/purge_vanilla.lua [AllowLoadGameType vanilla]
+Purges/purge_tbc.lua [AllowLoadGameType tbc]
+Purges/purge_forever.lua [AllowLoadGameType camelot][ExcludeLoadGameType standard, classic]
+DeathlogData~Tables.lua [AllowLoadGameType vanilla, tbc, camelot]
+DeathlogData~Finalizer.lua [AllowLoadGameType vanilla, tbc, camelot]

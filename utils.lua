@@ -18,6 +18,9 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with the Deathlog AddOn. If not, see <http://www.gnu.org/licenses/>.
 --]]
+
+Deathlog_IS_FOREVER = WOW_PROJECT_ID == WOW_PROJECT_CAMELOT
+Deathlog_EXPANSION_LEVEL = Deathlog_IS_FOREVER and 0 or (GetExpansionLevel and GetExpansionLevel() or 0)
 --
 --
 
@@ -173,7 +176,7 @@ local instance_min_levels = {
 }
 
 -- TBC instance min levels
-if GetExpansionLevel and GetExpansionLevel() >= 1 then
+if Deathlog_EXPANSION_LEVEL >= 1 then
 	local tbc_min_levels = {
 		[543] = 57,  -- Hellfire Ramparts
 		[542] = 58,  -- The Blood Furnace
@@ -292,8 +295,16 @@ local zone_parent_map = {
 	[1461] = 1415, -- Arathi Basin (in Arathi Highlands)
 }
 
+if Deathlog_IS_FOREVER then
+	zone_parent_map[2482] = 1414 -- Mount Hyjal
+	zone_parent_map[2524] = 1414 -- Darkspear Islands
+	zone_parent_map[2652] = 1414 -- Shen'dralas
+	zone_parent_map[2548] = 1415 -- Riverglades
+	zone_parent_map[2521] = 947  -- Zephras Isle
+end
+
 -- TBC zones and hierarchy (add if expansion is available)
-if GetExpansionLevel and GetExpansionLevel() >= 1 then
+if Deathlog_EXPANSION_LEVEL >= 1 then
 	Deathlog_WORLD_MAP_ID = 946
 	Deathlog_OUTLAND_ID = 1945
 
@@ -410,7 +421,7 @@ Deathlog_race_tbl = {
 	["Gnome"] = 7,
 	["Troll"] = 8,
 }
-if GetExpansionLevel and GetExpansionLevel() >= 1 then
+if Deathlog_EXPANSION_LEVEL >= 1 then
 	Deathlog_race_tbl["Blood Elf"] = 10
 	Deathlog_race_tbl["Draenei"] = 11
 end
@@ -2435,10 +2446,10 @@ local function registerRecorders()
 				record_econ_handler:RegisterEvent("MAIL_INBOX_UPDATE") -- Using mailbox
 				record_econ_handler:RegisterEvent("CHAT_MSG_LOOT") -- Using mailbox
 				record_econ_handler:RegisterEvent("TRADE_SHOW") -- Trade opened
-				record_econ_handler:RegisterEvent("AUCTION_BIDDER_LIST_UPDATE") -- Using Auction house
+				pcall(record_econ_handler.RegisterEvent, record_econ_handler, "AUCTION_BIDDER_LIST_UPDATE") -- Using Auction house
 
-				TradeFrameTradeButton:SetScript("OnClick", function()
-					local _item_name, _, _, _, _enchantment_name, _ = GetTradePlayerItemInfo(7)
+				TradeFrameTradeButton:HookScript("OnClick", function()
+					local _item_name, _, _, _, _, _enchantment_name = GetTradePlayerItemInfo(7)
 					if _item_name and _enchantment_name then
 						local _target_trader = TradeFrameRecipientNameText:GetText()
 						deathlog_record_econ_stats[GetServerTime() .. "Ench"] = UnitName("player")
@@ -2449,7 +2460,6 @@ local function registerRecorders()
 							.. ", from: "
 							.. (_target_trader or "unknown")
 					end
-					AcceptTrade()
 				end)
 
 				record_econ_handler:SetScript("OnEvent", function(self, event, arg)

@@ -92,7 +92,7 @@ for category_idx, category_name in ipairs(category_order) do
 		for instance_name, instance_id in pairs(instances) do
 			if category_lookup[instance_id] then
 				local sort_key = expansion_idx * 100000 + category_idx * 10000 + instance_id
-				table.insert(sorted_instance_entries, { instance_id, id_to_file_name[instance_id], instance_name, sort_key, expansion_idx })
+				table.insert(sorted_instance_entries, { instance_id, id_to_file_name[instance_id] or "RANDOMDUNGEON", instance_name, sort_key, expansion_idx })
 			end
 		end
 	end
@@ -203,7 +203,7 @@ local function createFilterButton(parent, exp_idx, label_text)
 end
 
 -- Only create filter buttons if TBC (or higher) is available
-local show_filter_bar = GetExpansionLevel and GetExpansionLevel() >= 1 and #available_expansions > 1
+local show_filter_bar = Deathlog_EXPANSION_LEVEL >= 1 and #available_expansions > 1
 if show_filter_bar then
 	local x_offset = 0
 	for _, exp_idx in ipairs(available_expansions) do

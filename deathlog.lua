@@ -295,7 +295,8 @@ local function deathlog_isFilteredEntry(player_data)
 		return true
 	end
 
-	if DeathlogDataCopy.PRECOMPUTED_PURGES[realm] and DeathlogDataCopy.PRECOMPUTED_PURGES[realm][cs] then
+	local precomputed_purges = DeathlogDataCopy.PRECOMPUTED_PURGES
+	if precomputed_purges and precomputed_purges[realm] and precomputed_purges[realm][cs] then
 		return true
 	end
 
@@ -735,19 +736,43 @@ local function printVersions()
 	end
 	local isLoaded = C_AddOns and C_AddOns.IsAddOnLoaded or IsAddOnLoaded
 
-	-- Print a separately-shipped companion AddOn line. GetAddOnMetadata reads the
-	-- on-disk TOC, so it returns a version even when the AddOn is installed but
-	-- DISABLED (unchecked in the AddOns list) — which is misleading because a
-	-- disabled companion contributes nothing at runtime. So report the loaded
-	-- state: skip when not installed, and mark it (disabled) when installed but
-	-- not loaded.
-	local function printCompanion(label, name)
+	local function formatVersion(v)
+		if type(v) == "number" and v >= 1e9 then
+			return date("!%Y-%m-%d", v)
+		elseif type(v) == "number" and v >= 10000 then
+			return string.format("%d.%d.%d", math.floor(v / 10000), math.floor(v / 100) % 100, v % 100)
+		end
+		return tostring(v)
+	end
+
+	local function isSameVersion(runtimeVersion, tocVersion)
+		local toc = tostring(tocVersion):gsub("^v", "")
+		return tostring(runtimeVersion) == toc or formatVersion(runtimeVersion) == toc
+	end
+
+	local embeds = ", " .. (GetAddOnMetadata("Deathlog", "X-Embeds") or "") .. ","
+	local function printCompanion(label, name, lib)
+		local runtimeVersion = type(lib) == "table" and lib.VERSION or nil
 		local version = metaVersion(name)
-		if not version then return end -- not installed
-		if isLoaded and isLoaded(name) then
-			DEFAULT_CHAT_FRAME:AddMessage("  " .. label .. ": |cffffffff" .. version .. "|r")
-		else
-			DEFAULT_CHAT_FRAME:AddMessage("  " .. label .. ": |cffffffff" .. version .. "|r |cff999999(installed, disabled)|r")
+		local standaloneLoaded = version and isLoaded and isLoaded(name)
+		local embedded = embeds:find(", " .. name .. ",", 1, true) ~= nil
+		if runtimeVersion then
+			local note = ""
+			if standaloneLoaded and isSameVersion(runtimeVersion, version) then
+				note = " |cff999999(standalone)|r"
+			elseif standaloneLoaded and not lib.Shutdown then
+				-- Copies from before the handover have no Shutdown and cannot be replaced.
+				note = " |cff999999(another addon's older copy; standalone " .. formatVersion(tonumber(version) or version) .. " inactive)|r"
+			elseif standaloneLoaded then
+				note = " |cff999999(" .. (embedded and "embedded in Deathlog" or "another addon's copy") .. "; standalone " .. formatVersion(tonumber(version) or version) .. " superseded)|r"
+			elseif not lib.Shutdown then
+				note = " |cff999999(another addon's older copy)|r"
+			elseif embedded then
+				note = " |cff999999(embedded in Deathlog)|r"
+			end
+			DEFAULT_CHAT_FRAME:AddMessage("  " .. label .. ": |cffffffff" .. formatVersion(runtimeVersion) .. "|r" .. note)
+		elseif version then
+			DEFAULT_CHAT_FRAME:AddMessage("  " .. label .. ": |cffffffff" .. formatVersion(tonumber(version) or version) .. "|r |cff999999(installed, disabled)|r")
 		end
 	end
 
@@ -756,16 +781,13 @@ local function printVersions()
 	local mainVersion = metaVersion("Deathlog") or "unknown"
 	DEFAULT_CHAT_FRAME:AddMessage("  Deathlog: |cffffffff" .. mainVersion .. "|r")
 
-	-- DeathNotificationLib is a hard runtime dependency (always active via the
-	-- global), so its runtime value is the real one. Prefer its separately-shipped
-	-- TOC version; fall back to the embed revision (embedded dev structure).
-	local dnlVersion = metaVersion("DeathNotificationLib")
-		or (DeathNotificationLib and DeathNotificationLib.VERSION)
-	DEFAULT_CHAT_FRAME:AddMessage("  DeathNotificationLib: |cffffffff" .. tostring(dnlVersion or "unknown") .. "|r")
+	printCompanion("DeathNotificationLib", "DeathNotificationLib", DeathNotificationLib)
 
 	-- Optional data companions: only report as active when actually loaded.
-	printCompanion("DeathlogData", "DeathlogData")
-	printCompanion("DeathNotificationLibData", "DeathNotificationLibData")
+	printCompanion("DeathlogData", "DeathlogData", DeathlogData)
+	printCompanion("DeathNotificationLibData", "DeathNotificationLibData", DeathNotificationLibData)
+	printCompanion("ProfanityLib", "ProfanityLib", ProfanityLib)
+	printCompanion("ProfanityLibData", "ProfanityLibData", ProfanityLibData)
 
 	-- Note a known newer version, if one has been detected from other players.
 	local detected = deathlog_settings and deathlog_settings["newest_detected_update_version"]
