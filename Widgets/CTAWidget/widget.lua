@@ -36,7 +36,8 @@ local BACKDROP_INFO = {
 }
 
 local FRAME_WIDTH  = 440
-local FRAME_HEIGHT = 300
+local FRAME_MIN_HEIGHT = 300
+local TEXT_WIDTH = FRAME_WIDTH - 32
 local AUTO_DISMISS = 60 -- seconds
 
 ---------------------------------------------------------------------------
@@ -44,12 +45,14 @@ local AUTO_DISMISS = 60 -- seconds
 ---------------------------------------------------------------------------
 
 local cta_frame = CreateFrame("Frame", "DeathlogCTAWidget", UIParent, "BackdropTemplate")
-cta_frame:SetSize(FRAME_WIDTH, FRAME_HEIGHT)
+cta_frame:SetSize(FRAME_WIDTH, FRAME_MIN_HEIGHT)
 cta_frame:SetPoint("CENTER", UIParent, "CENTER", 0, 80)
 cta_frame:SetBackdrop(BACKDROP_INFO)
 cta_frame:SetBackdropColor(0.08, 0.08, 0.08, 0.95)
 cta_frame:SetBackdropBorderColor(0.85, 0.65, 0.15, 1)
-cta_frame:SetFrameStrata("DIALOG")
+-- Above the main window, which sits at FULLSCREEN_DIALOG.
+cta_frame:SetFrameStrata("FULLSCREEN_DIALOG")
+cta_frame:SetToplevel(true)
 cta_frame:SetMovable(true)
 cta_frame:EnableMouse(true)
 cta_frame:RegisterForDrag("LeftButton")
@@ -84,7 +87,7 @@ title_text:SetTextColor(1, 0.82, 0)
 
 local body_text = cta_frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 body_text:SetPoint("TOPLEFT", skull_icon, "BOTTOMLEFT", 0, -12)
-body_text:SetPoint("RIGHT", cta_frame, "RIGHT", -18, 0)
+body_text:SetWidth(TEXT_WIDTH)
 body_text:SetJustifyH("LEFT")
 body_text:SetSpacing(2)
 
@@ -94,7 +97,7 @@ body_text:SetSpacing(2)
 
 local path_text = cta_frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 path_text:SetPoint("TOPLEFT", body_text, "BOTTOMLEFT", 0, -10)
-path_text:SetPoint("RIGHT", cta_frame, "RIGHT", -18, 0)
+path_text:SetWidth(TEXT_WIDTH)
 path_text:SetJustifyH("LEFT")
 path_text:SetTextColor(0.7, 0.7, 0.7)
 
@@ -138,17 +141,17 @@ end
 -- Contact rows: Discord Server, Discord DM, Email
 ---------------------------------------------------------------------------
 
-local discord_server_label, discord_server_box = createCopyBox(
+local discord_server_label = createCopyBox(
 	cta_frame, "TOPLEFT", path_text, "BOTTOMLEFT", 0, -14, 250,
 	"Discord Server:", "discord.gg/TrJFGcah7z"
 )
 
-local discord_dm_label, discord_dm_box = createCopyBox(
+local discord_dm_label = createCopyBox(
 	cta_frame, "TOPLEFT", discord_server_label, "BOTTOMLEFT", 0, -10, 180,
 	"Discord DM:", "deathwing1337"
 )
 
-local email_label, email_box = createCopyBox(
+local email_label = createCopyBox(
 	cta_frame, "TOPLEFT", discord_dm_label, "BOTTOMLEFT", 0, -10, 250,
 	"Email:", "deathwing4528@googlemail.com"
 )
@@ -202,6 +205,13 @@ cta_frame:SetScript("OnHide", function()
 	end
 end)
 
+local function fitHeight()
+	-- Mirrors the anchor offsets above; the edit boxes reach 4px below the last label.
+	local height = 14 + 28 + 12 + body_text:GetStringHeight() + 10 + path_text:GetStringHeight() + 14
+		+ 3 * email_label:GetStringHeight() + 2 * 10 + 4 + 14 + btn_height + 16
+	cta_frame:SetHeight(math.max(FRAME_MIN_HEIGHT, math.ceil(height)))
+end
+
 -- Register ESC to close
 tinsert(UISpecialFrames, "DeathlogCTAWidget")
 
@@ -227,21 +237,32 @@ local function isThresholdReached()
     return true
 end
 
---- Show the CTA popup with the given entry count.
---- @param count number  The entry count to display
-local function showCTA(count)
+--- Show the CTA popup with every death in the file, live and archived, across all realms.
+local function showCTA()
 	-- Apply localized strings
 	title_text:SetText(Deathlog_L.cta_title or "Your Deathlog Data Matters!")
 
+	local percent, live, archived = Deathlog_archiveFullPercent()
+	if not percent then
+		Deathlog_archiveStats()
+		percent, live, archived = Deathlog_archiveFullPercent()
+	end
+
 	local body = Deathlog_L.cta_body or "You've collected over %d death entries — that's incredible!\n\nThis data helps us build better stats, heatmaps, and insights for the entire hardcore community.\n\nPlease consider sharing your database file with us!"
-	body_text:SetText(string.format(body, count))
+	body = string.format(body, math.max(getTotalEntryCount(), live + archived))
+	if archived > 0 then
+		body = body .. "\n\n" .. string.format(Deathlog_L.archive_cta_note, archived)
+	end
+	body_text:SetText(body)
 
 	path_text:SetText(Deathlog_L.cta_file_path or "File: WTF/Account/<name>/SavedVariables/Deathlog.lua")
 
 	remind_btn:SetText(Deathlog_L.cta_remind_later or "Remind me later")
 	dismiss_btn:SetText(Deathlog_L.cta_dismiss or "Don't show again")
 
+	fitHeight()
 	cta_frame:Show()
+	cta_frame:Raise()
 end
 
 ---------------------------------------------------------------------------
@@ -278,7 +299,7 @@ function Deathlog_CheckCTA()
 
 	deathlog_settings["cta_last_shown"] = GetServerTime()
 
-	showCTA(getTotalEntryCount())
+	showCTA()
 end
 
 --- Check if CTA banner should be visible in the menu.

@@ -72,6 +72,8 @@ local function getHcState(unit)
 
 	local name = UnitName(unit)
 	local guid = UnitGUID(unit)
+	if Deathlog_isSecret(name) then name = nil end
+	if Deathlog_isSecret(guid) then guid = nil end
 	if (name and hc_states[unit]._name ~= name) or (guid and hc_states[unit]._guid ~= guid) then
 		if unit ~= "player" then
 			hc_states[unit] = { _name = name, _guid = guid }
@@ -127,6 +129,7 @@ local function updateSoulOfIronTracking(unit)
 	if unitHasSoulOfIron(unit) then
 		unitState.hasSoulOfIron = true
 		unitState.hadSoulOfIron = true
+		unitState.soulOfIronSeen = true
 	else
 		unitState.hasSoulOfIron = false
 	end
@@ -134,6 +137,7 @@ local function updateSoulOfIronTracking(unit)
 	if unitHasTarnishedSoul(unit) then
 		unitState.hasTarnishedSoul = true
 		unitState.hadTarnishedSoul = true
+		unitState.soulOfIronSeen = true
 	else
 		unitState.hasTarnishedSoul = false
 	end
@@ -337,6 +341,12 @@ function Deathlog_getExternalHardcoreAddon()
 	return getHcState("player").hadExternalHardcore
 end
 
+--- True once Soul of Iron or Tarnished Soul has been seen on the player.
+---@return boolean
+function Deathlog_hadSoulOfIron()
+	return getHcState("player").soulOfIronSeen == true
+end
+
 --- Returns true if the unit should have its deaths tracked by Deathlog.
 --- This is the callback passed to DeathNotificationLib.AttachAddon().
 ---@param unit string  Unit token (e.g. "player", "party1")
@@ -368,8 +378,9 @@ deathFrame:SetScript("OnEvent", function()
 		unitState.hasExternalHardcore = nil
 	end
 
-	-- SoI realm: mark tainted on any death so we don't broadcast again
-	if IS_SOUL_OF_IRON_REALM then
+	-- Only a Soul of Iron character is tainted; hasDied already stops broadcasts for the rest.
+	if IS_SOUL_OF_IRON_REALM and (unitState.hasSoulOfIron or unitState.soulOfIronSeen) then
+		unitState.soulOfIronSeen = true
 		unitState.hadSoulOfIron = true
 		unitState.hadTarnishedSoul = true
 	end

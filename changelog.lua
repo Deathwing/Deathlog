@@ -30,6 +30,30 @@ local NO_CHANGELOG_VERSIONS = {
 local CHANGELOG_CONTENT = [[
 |cFFFFD700Deathlog Changelog|r
 
+|cFF00FF00[0.7.0] - 2026-11-18|r
+
+|cFFFFFFFFNew Features|r
+- Your death log no longer grows too big for the game to load. Deathlog keeps the newest 50,000 deaths loaded (you can lower this to 10,000 under Options > Deathlog > Database Sync) and archives older ones, which the Search tab still finds. Chat tells you when more get archived or the oldest are removed
+- Personal death log: your own deaths are kept in a log that every character on your account shares, Hardcore deaths included. It is never broadcast or synced. In the Search tab, set Server to 'Personal' to see it; turn it off or clear it in Options > Deathlog
+- WoW Forever: statistics and heatmaps are built from your own log, including the personal deaths of all your characters, and refresh at login when deaths were added. Type /dl recompute to refresh them right away
+
+|cFFFFFFFFImprovements|r
+- Options > Deathlog > Database Sync shows how full your database is and how many deaths are in your log, the archive and your personal log. The share popup counts archived deaths too, and chat warns you once the database is 90% full
+- Database sync no longer asks other players for days already in your archive, so it fills recent gaps instead of resending old deaths, and waits longer after a sync that brings nothing new
+- On normal realms the info button now explains where your own deaths go and what the statistics and heatmaps show, instead of saying 'Not supported'
+
+|cFFFFFFFFFixes|r
+- WoW Forever: hovering a creature or corpse inside dungeons no longer throws errors. The game hides that information there, so the creature ranking and corpse lines are left out. Your own deaths are still logged
+- WoW Forever: no more 'tried to call the protected function' errors from Deathlog in battlegrounds, dungeons and raids. Forever blocks addon chat messages there, so Deathlog no longer tries to send while you are inside
+- WoW Forever: when the game reports your death twice, it is now recorded and announced once
+- Settings survive a failed load: after you log out once with this version, each character keeps a copy of your Deathlog settings. If the database fails to load, they are restored and a warning explains how to save Deathlog.lua.bak before it is overwritten
+- Burning Crusade Anniversary characters that never had Soul of Iron are no longer told after a death that they lost Hardcore status, and on Classic Era Hardcore realms the info button no longer mentions Tarnished Soul
+- /dl versions shows which copy is really in use: a newer copy that came with another addon is no longer called 'embedded in Deathlog', and an older copy from another addon that cannot be replaced is marked as such
+- Deaths reported by other players, such as party members, now show a death alert. If you never opened the Deathlog options, they are no longer ignored and Deathlog's chat channels are hidden again. On Classic Era Hardcore realms Deathlog then also changes the game's Hardcore death alert and chat settings, as 'Auto-configure Blizzard death tracking' describes; turn that option off if you do not want this
+- 'Accept legacy protocol messages' is switched off once for everyone, because opening the options used to turn it on without asking. Turn it back on in Options > Deathlog if you want it, and it stays on
+- With database sync turned off, Deathlog no longer saves deaths from other players' sync when an addon such as Deathmap Live Tracker is installed, and no longer imports HardcoreTBC's saved death history. Live deaths still arrive
+- The playtime option is now called 'Keep playtime on logged deaths'. It only decides whether /played time is kept on deaths saved in your log, and it never hid your own /played time from your death message
+
 |cFF00FF00[0.6.0] - 2026-11-10|r
 
 |cFFFFFFFFNew Features|r

@@ -31,7 +31,7 @@ local function checkForEntryAndSetTooltip()
 	end
 	timer_handle = C_Timer.NewTimer(0.1, function()
 		local text = _G["GameTooltipTextLeft1"]:GetText()
-		if text ~= nil then
+		if text ~= nil and not Deathlog_isSecret(text) then
 			local _name = string.match(text, corpse_pattern)
 			if _name then
 				local realmName = GetRealmName()

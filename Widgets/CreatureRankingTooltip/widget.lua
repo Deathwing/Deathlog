@@ -56,7 +56,7 @@ function Deathlog_activateCreatureRankingTooltip()
 	if loaded_crt == false then
 		hookTooltipSetUnit(function()
 			local a, b = getTooltipUnit()
-			if not a or (b and UnitIsPlayer(b)) then return end
+			if not a or Deathlog_isSecret(a) or Deathlog_isSecret(b) or (b and UnitIsPlayer(b)) then return end
 
 			if deathlog_settings[widget_name] and deathlog_settings[widget_name]["enable_crt"] then
 				if creature_ranking then

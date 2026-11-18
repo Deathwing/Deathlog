@@ -1,12 +1,12 @@
 ## Interface: 20506, 16001, 11509
 ## Title: Deathlog
-## Notes: Only for Hardcore on Classic Era, Burning Crusade Anniversary and World of Warcraft: Forever servers.
+## Notes: Hardcore death log, statistics and heatmaps for Classic Era, Burning Crusade Anniversary and World of Warcraft: Forever. Normal characters keep a personal log of their own deaths and, on Classic Era and Burning Crusade Anniversary, see the Hardcore statistics.
 ## IconTexture: Interface\AddOns\Deathlog\Media\logo.png
 ## Author: Deathwing, originally by Yazpad
 ## X-License: GNU GPL3
 ## X-Category: Leveling,Guild
 ## Category: Hardcore
-## Version: 0.6.0
+## Version: 0.7.0
 ## X-Website: https://github.com/Deathwing/Deathlog
 ## X-Repository: https://github.com/Deathwing/Deathlog
 ## X-Curse-Project-ID: 1711471
@@ -18,8 +18,8 @@
 # ## OptionalDeps: DeathlogData
 
 ## DefaultState: enabled
-## SavedVariables: deathlog_settings, deathlog_data, deathlog_data_map, deathlog_watchlist_entries, deathlog_record_econ_stats, deathlog_entry_counts, deathlog_purged, deathlog_precomputed, deathlog_entry_origin, deathlog_ignored_senders, deathlog_hidden_names
-## SavedVariablesPerCharacter: deathlog_char_data
+## SavedVariables: deathlog_settings, deathlog_data, deathlog_data_map, deathlog_watchlist_entries, deathlog_record_econ_stats, deathlog_entry_counts, deathlog_purged, deathlog_precomputed, deathlog_entry_origin, deathlog_ignored_senders, deathlog_hidden_names, deathlog_archive, deathlog_personal_data
+## SavedVariablesPerCharacter: deathlog_char_data, deathlog_settings_backup
 # EMBED_PACKAGE ProfanityLibData
 # REMOVE_NEXT_LINE
 Libs/ProfanityLib/Data/ProfanityLibData.xml
@@ -77,8 +77,10 @@ embeds.xml
 
 utils.lua
 purge.lua
+archive.lua
 
 hardcore_state.lua
+personal_log.lua
 update_sources.lua
 info_button.lua
 

@@ -52,11 +52,61 @@ local function initVariables()
 	deathlog_ignored_senders = deathlog_ignored_senders or {}
 	deathlog_hidden_names = deathlog_hidden_names or {}
 	deathlog_precomputed = deathlog_precomputed or {}
+	deathlog_archive = deathlog_archive or {}
+	deathlog_personal_data = deathlog_personal_data or {}
 	deathlog_dev_data = deathlog_dev_data or {}
 	deathlog_char_data = deathlog_char_data or {}
 	---@diagnostic enable: lowercase-global
 end
 initVariables()
+
+-- If these are still the globals at ADDON_LOADED, Deathlog.lua did not load (missing or too large to compile).
+local load_time_settings, load_time_data = deathlog_settings, deathlog_data
+local settings_load_failed = false
+
+local function copySettings(src)
+	local out = {}
+	for k, v in pairs(src) do
+		if type(v) == "table" then
+			out[k] = copySettings(v)
+		elseif type(v) ~= "function" then
+			out[k] = v
+		end
+	end
+	return out
+end
+
+local function saveSettingsBackup()
+	local total = Deathlog_archiveTotal() + Deathlog_personalLogCount()
+	local backup = deathlog_settings_backup
+	if settings_load_failed and type(backup) == "table" then
+		total = math.max(total, tonumber(backup.db_total) or 0)
+	end
+	deathlog_settings_backup = {
+		settings = copySettings(deathlog_settings),
+		db_total = total,
+		saved_at = GetServerTime(),
+	}
+end
+
+local function showLoadFailedWarning()
+	DEFAULT_CHAT_FRAME:AddMessage(Deathlog_L.load_failed_chat)
+	if StaticPopup_Show then
+		StaticPopup_Show("DEATHLOG_LOAD_FAILED")
+	end
+end
+
+if StaticPopupDialogs then
+	StaticPopupDialogs["DEATHLOG_LOAD_FAILED"] = {
+		text = Deathlog_L.load_failed_popup,
+		button1 = OKAY,
+		timeout = 0,
+		whileDead = true,
+		hideOnEscape = false,
+		showAlert = true,
+		preferredIndex = 3,
+	}
+end
 
 local sync_options -- forward declaration; populated after options table
 local deathlog_sync_options_registered = false
@@ -281,6 +331,35 @@ local function ensureNameIndex(realmName)
 	end
 end
 
+function Deathlog_forgetNameIndex(realmName, name, checksum)
+	local by_name = name and name_index[realmName] and name_index[realmName][name]
+	if by_name then
+		by_name[checksum] = nil
+	end
+end
+
+--- The stored shared-log death of `name` within the dedup window of `date`, if any.
+---@param name string
+---@param date number
+---@param level number
+---@return table|nil entry
+---@return string|nil checksum
+function Deathlog_findSharedDeath(name, date, level)
+	local realmName = GetRealmName()
+	local entries = deathlog_data[realmName]
+	if not entries then return nil end
+	ensureNameIndex(realmName)
+	for cs in pairs(name_index[realmName][name] or {}) do
+		local entry = entries[cs]
+		if entry then
+			local window = DeathNotificationLib.GetDedupWindow(math.max(level, tonumber(entry["level"]) or 0))
+			if math.abs(date - (tonumber(entry["date"]) or 0)) <= window then
+				return entry, cs
+			end
+		end
+	end
+end
+
 --- Returns true if player_data represents a known-fake (i.e. hunter feign-death bug) or purged death and should be suppressed.
 --- Checks static and runtime purge lists, plus identical map_pos against all stored entries for the same player (a reliable fabrication signal).
 local function deathlog_isFilteredEntry(player_data)
@@ -297,6 +376,10 @@ local function deathlog_isFilteredEntry(player_data)
 
 	local precomputed_purges = DeathlogDataCopy.PRECOMPUTED_PURGES
 	if precomputed_purges and precomputed_purges[realm] and precomputed_purges[realm][cs] then
+		return true
+	end
+
+	if Deathlog_isArchived(realm, cs, player_data["date"]) then
 		return true
 	end
 
@@ -317,6 +400,12 @@ end
 local deathAlertWhitelist = setmetatable({}, { __mode = "k" })
 
 local function newEntry(_player_data, _checksum, num_peer_checks, in_guild, source)
+	if source == SOURCE.LOCAL_SELF then
+		Deathlog_addPersonalEntry(_player_data, _checksum)
+		return
+	end
+	if Deathlog_isPersonalEntry(_player_data) then return end
+
 	local realmName = GetRealmName()
 
 	if deathlog_data[realmName] == nil then
@@ -332,6 +421,9 @@ local function newEntry(_player_data, _checksum, num_peer_checks, in_guild, sour
 	local player_name = _player_data["name"]
 	local current_time = _player_data["date"] or GetServerTime()
 
+	-- Until the archived-key filter is built, a synced death could be an archived one.
+	if source == SOURCE.SYNC and not Deathlog_archiveKeysReady() then return end
+
 	-- Reject entries that should be filtered
 	if deathlog_isFilteredEntry(_player_data) then return end
 
@@ -344,6 +436,8 @@ local function newEntry(_player_data, _checksum, num_peer_checks, in_guild, sour
 			return
 		end
 	end
+
+	Deathlog_mirrorOwnDeath(_player_data, _checksum, source)
 
 	local alert_player_data = _player_data
 
@@ -428,6 +522,8 @@ local function newEntry(_player_data, _checksum, num_peer_checks, in_guild, sour
 		counts[source] = (counts[source] or 0) + 1
 		counts["total"] = (counts["total"] or 0) + 1
 	end
+
+	Deathlog_archiveNoteEntry()
 end
 
 --- One-time cleanup: scan existing deathlog_data for near-duplicate entries
@@ -523,17 +619,171 @@ local function deathlog_watchlistIconProvider(playerName)
 	return watch.Icon
 end
 
+local has_shipped_stats = (DeathlogDataCopy.PRECOMPUTED_GENERAL_STATS and DeathlogDataCopy.PRECOMPUTED_LOG_NORMAL_PARAMS and DeathlogDataCopy.PRECOMPUTED_LOG_NORMAL_PARAMS_BY_CAUSE and DeathlogDataCopy.PRECOMPUTED_KAPLAN_MEIER and DeathlogDataCopy.PRECOMPUTED_KAPLAN_MEIER_BY_CAUSE and DeathlogDataCopy.PRECOMPUTED_MOST_DEADLY_BY_ZONE and DeathlogDataCopy.PRECOMPUTED_CAUSE_STATS and DeathlogDataCopy.PRECOMPUTED_PURGES) and true or false
+local has_shipped_heatmaps = (DeathNotificationLibDataCopy.HEATMAP_INTENSITY and DeathNotificationLibDataCopy.HEATMAP_INTENSITY_BY_CAUSE and DeathNotificationLibDataCopy.HEATMAP_CREATURE_SUBSET) and true or false
+local precompute_running = false
+
+-- The date sum still changes when a cap makes a new death replace the oldest one.
+local function localCacheKey(version, data)
+	local n, date_sum = 0, 0
+	for _, entries in pairs(data) do
+		for _, entry in pairs(entries) do
+			n = n + 1
+			date_sum = date_sum + (tonumber(entry["date"]) or 0)
+		end
+	end
+	return string.format("%s:%s:%d:%.0f", tostring(version), tostring(WOW_PROJECT_ID), n, date_sum)
+end
+
+-- One heavy step per frame; results are cached in deathlog_precomputed under localCacheKey().
+---@param force boolean rebuild the local statistics even when their cache key still matches
+local function buildPrecomputeSteps(force)
+	local version = GetAddOnMetadata("Deathlog", "Version")
+	local precompute_steps = {}
+	local local_data, cache_key
+	if not (has_shipped_stats and has_shipped_heatmaps) then
+		local_data = Deathlog_withPersonalLog(deathlog_data)
+		cache_key = localCacheKey(version, local_data)
+	end
+
+	if has_shipped_stats then
+		deathlog_precomputed.PRECOMPUTED_GENERAL_STATS = nil
+		deathlog_precomputed.PRECOMPUTED_LOG_NORMAL_PARAMS = nil
+		deathlog_precomputed.PRECOMPUTED_LOG_NORMAL_PARAMS_BY_CAUSE = nil
+		deathlog_precomputed.PRECOMPUTED_KAPLAN_MEIER = nil
+		deathlog_precomputed.PRECOMPUTED_KAPLAN_MEIER_BY_CAUSE = nil
+		deathlog_precomputed.PRECOMPUTED_MOST_DEADLY_BY_ZONE = nil
+		deathlog_precomputed.PRECOMPUTED_CAUSE_STATS = nil
+		deathlog_precomputed.PRECOMPUTED_PURGES = nil
+	else
+		if force or not (cache_key == deathlog_precomputed.DD_VERSION and deathlog_precomputed.PRECOMPUTED_GENERAL_STATS and deathlog_precomputed.PRECOMPUTED_LOG_NORMAL_PARAMS and deathlog_precomputed.PRECOMPUTED_LOG_NORMAL_PARAMS_BY_CAUSE and deathlog_precomputed.PRECOMPUTED_KAPLAN_MEIER and deathlog_precomputed.PRECOMPUTED_KAPLAN_MEIER_BY_CAUSE and deathlog_precomputed.PRECOMPUTED_MOST_DEADLY_BY_ZONE and deathlog_precomputed.PRECOMPUTED_CAUSE_STATS and deathlog_precomputed.PRECOMPUTED_PURGES) then
+			deathlog_precomputed.DD_VERSION = cache_key
+			precompute_steps[#precompute_steps + 1] = function() deathlog_precomputed.PRECOMPUTED_GENERAL_STATS = Deathlog_calculate_statistics(local_data) end
+			precompute_steps[#precompute_steps + 1] = function() deathlog_precomputed.PRECOMPUTED_LOG_NORMAL_PARAMS = Deathlog_calculateLogNormalParameters(local_data) end
+			precompute_steps[#precompute_steps + 1] = function() deathlog_precomputed.PRECOMPUTED_LOG_NORMAL_PARAMS_BY_CAUSE = Deathlog_calculateLogNormalParametersByCause(local_data) end
+			precompute_steps[#precompute_steps + 1] = function() deathlog_precomputed.PRECOMPUTED_KAPLAN_MEIER = Deathlog_calculateKaplanMeier(local_data) end
+			precompute_steps[#precompute_steps + 1] = function() deathlog_precomputed.PRECOMPUTED_KAPLAN_MEIER_BY_CAUSE = Deathlog_calculateKaplanMeierByCause(local_data) end
+			precompute_steps[#precompute_steps + 1] = function() deathlog_precomputed.PRECOMPUTED_MOST_DEADLY_BY_ZONE = Deathlog_calculateMostDeadlyByZone(local_data) end
+			precompute_steps[#precompute_steps + 1] = function() deathlog_precomputed.PRECOMPUTED_CAUSE_STATS = Deathlog_calculateCauseStats(local_data) end
+			precompute_steps[#precompute_steps + 1] = function() deathlog_precomputed.PRECOMPUTED_PURGES = Deathlog_calculatePurges(deathlog_data) end
+		end
+
+		precompute_steps[#precompute_steps + 1] = function()
+			DeathlogDataCopy.PRECOMPUTED_GENERAL_STATS = deathlog_precomputed.PRECOMPUTED_GENERAL_STATS
+			DeathlogDataCopy.PRECOMPUTED_LOG_NORMAL_PARAMS = deathlog_precomputed.PRECOMPUTED_LOG_NORMAL_PARAMS
+			DeathlogDataCopy.PRECOMPUTED_LOG_NORMAL_PARAMS_BY_CAUSE = deathlog_precomputed.PRECOMPUTED_LOG_NORMAL_PARAMS_BY_CAUSE
+			DeathlogDataCopy.PRECOMPUTED_KAPLAN_MEIER = deathlog_precomputed.PRECOMPUTED_KAPLAN_MEIER
+			DeathlogDataCopy.PRECOMPUTED_KAPLAN_MEIER_BY_CAUSE = deathlog_precomputed.PRECOMPUTED_KAPLAN_MEIER_BY_CAUSE
+			DeathlogDataCopy.PRECOMPUTED_MOST_DEADLY_BY_ZONE = deathlog_precomputed.PRECOMPUTED_MOST_DEADLY_BY_ZONE
+			DeathlogDataCopy.PRECOMPUTED_CAUSE_STATS = deathlog_precomputed.PRECOMPUTED_CAUSE_STATS
+			DeathlogDataCopy.PRECOMPUTED_PURGES = deathlog_precomputed.PRECOMPUTED_PURGES
+		end
+	end
+
+	if has_shipped_heatmaps then
+		deathlog_precomputed.HEATMAP_INTENSITY = nil
+		deathlog_precomputed.HEATMAP_INTENSITY_BY_CAUSE = nil
+		deathlog_precomputed.HEATMAP_CREATURE_SUBSET = nil
+	else
+		if force or not (cache_key == deathlog_precomputed.DNLD_VERSION and deathlog_precomputed.HEATMAP_INTENSITY and deathlog_precomputed.HEATMAP_INTENSITY_BY_CAUSE and deathlog_precomputed.HEATMAP_CREATURE_SUBSET) then
+			-- Shared by the three heatmap steps.
+			local heatmap_skull_locs
+			precompute_steps[#precompute_steps + 1] = function()
+				heatmap_skull_locs = Deathlog_calculateSkullLocs(local_data)
+				deathlog_precomputed.DNLD_VERSION = cache_key
+			end
+			precompute_steps[#precompute_steps + 1] = function() deathlog_precomputed.HEATMAP_INTENSITY = Deathlog_calculateHeatmapIntensity(heatmap_skull_locs) end
+			precompute_steps[#precompute_steps + 1] = function() deathlog_precomputed.HEATMAP_INTENSITY_BY_CAUSE = Deathlog_calculateHeatmapIntensityByCause(heatmap_skull_locs) end
+			precompute_steps[#precompute_steps + 1] = function() deathlog_precomputed.HEATMAP_CREATURE_SUBSET = Deathlog_calculateHeatmapCreatureSubset(heatmap_skull_locs) end
+		end
+
+		precompute_steps[#precompute_steps + 1] = function()
+			DeathNotificationLibDataCopy.HEATMAP_INTENSITY = deathlog_precomputed.HEATMAP_INTENSITY
+			DeathNotificationLibDataCopy.HEATMAP_INTENSITY_BY_CAUSE = deathlog_precomputed.HEATMAP_INTENSITY_BY_CAUSE
+			DeathNotificationLibDataCopy.HEATMAP_CREATURE_SUBSET = deathlog_precomputed.HEATMAP_CREATURE_SUBSET
+		end
+	end
+
+	return precompute_steps
+end
+
+---@param steps function[]
+---@param done function runs after the last step, or after a step errored
+local function runPrecompute(steps, done)
+	if #steps == 0 then
+		-- Cache is valid: run synchronously, no visible startup delay.
+		done()
+		return
+	end
+
+	-- Deathlog_YieldCheck() yields inside each step; one resume per frame stays under the script time limit.
+	precompute_running = true
+	local co = coroutine.create(function()
+		for i = 1, #steps do
+			steps[i]()
+		end
+	end)
+
+	local function resumePrecompute()
+		if Deathlog_SetYieldActive then Deathlog_SetYieldActive(true) end
+		local ok, err = coroutine.resume(co)
+		if Deathlog_SetYieldActive then Deathlog_SetYieldActive(false) end
+
+		if not ok then
+			-- Still finalize, on a fresh frame: widgets cope with a missing table.
+			precompute_running = false
+			geterrorhandler()(err)
+			C_Timer.After(0, done)
+			return
+		end
+
+		if coroutine.status(co) == "dead" then
+			-- Finalize on its own frame: this one already spent budget on the last chunk.
+			precompute_running = false
+			C_Timer.After(0, done)
+		else
+			C_Timer.After(0, resumePrecompute)
+		end
+	end
+
+	resumePrecompute()
+end
+
 local function handleEvent(self, event, ...)
 	if event == "ADDON_LOADED" then
 		local loaded_addon = ...
 		if loaded_addon == addonName then
+			local backup = deathlog_settings_backup
+			settings_load_failed = deathlog_settings == load_time_settings and deathlog_data == load_time_data
+				and type(backup) == "table" and type(backup.settings) == "table" and (tonumber(backup.db_total) or 0) > 0
 			initVariables()
+			if settings_load_failed then
+				for k, v in pairs(copySettings(backup.settings)) do
+					deathlog_settings[k] = v
+				end
+			end
+			-- Left by the removed archive reminder, also in older backups.
+			deathlog_settings["archive_shared_upto"] = nil
+			deathlog_settings["archive_cta_last_shown"] = nil
+			-- Older options panels saved true without the player choosing it.
+			if deathlog_settings["legacy_messages_reset"] == nil then
+				deathlog_settings["legacy_messages"] = nil
+				deathlog_settings["legacy_messages_reset"] = 1
+			end
+			Deathlog_collapsePersonalDuplicates()
+			Deathlog_archiveOnLoad(settings_load_failed)
 			self:UnregisterEvent("ADDON_LOADED")
 		end
+	elseif event == "PLAYER_LOGOUT" then
+		saveSettingsBackup()
 	elseif event == "PLAYER_ENTERING_WORLD" then
 		if deathlog_initialized then return end
 		deathlog_initialized = true
 		initMinimapButton()
+		Deathlog_archiveBuildKeys()
+		if settings_load_failed then
+			C_Timer.After(5, showLoadFailedWarning)
+		end
 
 		-- Write project id into settings
 		deathlog_settings["wow_project_id"] = WOW_PROJECT_ID
@@ -577,7 +827,9 @@ local function handleEvent(self, event, ...)
 			name             = "Deathlog",
 			tag              = "DLG",
 			isUnitTracked    = Deathlog_isUnitTracked,
+			isUnitRecordedLocally = Deathlog_isUnitRecordedLocally,
 			watchlistIconProvider = deathlog_watchlistIconProvider,
+			syncWindowDays   = Deathlog_archiveSyncWindow,
 			settings         = deathlog_settings,
 			db               = deathlog_data[realmName],
 			db_map           = deathlog_data_map[realmName],
@@ -585,77 +837,7 @@ local function handleEvent(self, event, ...)
 			addon_version    = version,
 		})
 		DeathNotificationLib.HookOnNewAddonEntry("Deathlog", newEntry)
-
-		-- Precomputation of statistics/heatmaps is heavy and, on large datasets,
-		-- exceeds the client's per-frame script limit ("script ran too long")
-		-- when run all at once. The results are cached in deathlog_precomputed,
-		-- so this only runs on a first login or after a version change; but that
-		-- first run must be spread across frames. We collect the individual
-		-- heavy computations into `precompute_steps` (each does one function's
-		-- worth of work), run them one per frame, then finalize (copy results
-		-- into the *DataCopy tables and load widgets). When nothing needs
-		-- computing (normal reload), `precompute_steps` is empty and the
-		-- finalizer runs immediately in this frame, preserving fast behavior.
-		local precompute_steps = {}
-
-		if DeathlogDataCopy.PRECOMPUTED_GENERAL_STATS and DeathlogDataCopy.PRECOMPUTED_LOG_NORMAL_PARAMS and DeathlogDataCopy.PRECOMPUTED_LOG_NORMAL_PARAMS_BY_CAUSE and DeathlogDataCopy.PRECOMPUTED_KAPLAN_MEIER and DeathlogDataCopy.PRECOMPUTED_KAPLAN_MEIER_BY_CAUSE and DeathlogDataCopy.PRECOMPUTED_MOST_DEADLY_BY_ZONE and DeathlogDataCopy.PRECOMPUTED_CAUSE_STATS and DeathlogDataCopy.PRECOMPUTED_PURGES then
-			deathlog_precomputed.PRECOMPUTED_GENERAL_STATS = nil
-			deathlog_precomputed.PRECOMPUTED_LOG_NORMAL_PARAMS = nil
-			deathlog_precomputed.PRECOMPUTED_LOG_NORMAL_PARAMS_BY_CAUSE = nil
-			deathlog_precomputed.PRECOMPUTED_KAPLAN_MEIER = nil
-			deathlog_precomputed.PRECOMPUTED_KAPLAN_MEIER_BY_CAUSE = nil
-			deathlog_precomputed.PRECOMPUTED_MOST_DEADLY_BY_ZONE = nil
-			deathlog_precomputed.PRECOMPUTED_CAUSE_STATS = nil
-			deathlog_precomputed.PRECOMPUTED_PURGES = nil
-		else
-			if not (version == deathlog_precomputed.DD_VERSION and deathlog_precomputed.PRECOMPUTED_GENERAL_STATS and deathlog_precomputed.PRECOMPUTED_LOG_NORMAL_PARAMS and deathlog_precomputed.PRECOMPUTED_LOG_NORMAL_PARAMS_BY_CAUSE and deathlog_precomputed.PRECOMPUTED_KAPLAN_MEIER and deathlog_precomputed.PRECOMPUTED_KAPLAN_MEIER_BY_CAUSE and deathlog_precomputed.PRECOMPUTED_MOST_DEADLY_BY_ZONE and deathlog_precomputed.PRECOMPUTED_CAUSE_STATS and deathlog_precomputed.PRECOMPUTED_PURGES) then
-				deathlog_precomputed.DD_VERSION = version
-				precompute_steps[#precompute_steps + 1] = function() deathlog_precomputed.PRECOMPUTED_GENERAL_STATS = Deathlog_calculate_statistics(deathlog_data) end
-				precompute_steps[#precompute_steps + 1] = function() deathlog_precomputed.PRECOMPUTED_LOG_NORMAL_PARAMS = Deathlog_calculateLogNormalParameters(deathlog_data) end
-				precompute_steps[#precompute_steps + 1] = function() deathlog_precomputed.PRECOMPUTED_LOG_NORMAL_PARAMS_BY_CAUSE = Deathlog_calculateLogNormalParametersByCause(deathlog_data) end
-				precompute_steps[#precompute_steps + 1] = function() deathlog_precomputed.PRECOMPUTED_KAPLAN_MEIER = Deathlog_calculateKaplanMeier(deathlog_data) end
-				precompute_steps[#precompute_steps + 1] = function() deathlog_precomputed.PRECOMPUTED_KAPLAN_MEIER_BY_CAUSE = Deathlog_calculateKaplanMeierByCause(deathlog_data) end
-				precompute_steps[#precompute_steps + 1] = function() deathlog_precomputed.PRECOMPUTED_MOST_DEADLY_BY_ZONE = Deathlog_calculateMostDeadlyByZone(deathlog_data) end
-				precompute_steps[#precompute_steps + 1] = function() deathlog_precomputed.PRECOMPUTED_CAUSE_STATS = Deathlog_calculateCauseStats(deathlog_data) end
-				precompute_steps[#precompute_steps + 1] = function() deathlog_precomputed.PRECOMPUTED_PURGES = Deathlog_calculatePurges(deathlog_data) end
-			end
-
-			precompute_steps[#precompute_steps + 1] = function()
-				DeathlogDataCopy.PRECOMPUTED_GENERAL_STATS = deathlog_precomputed.PRECOMPUTED_GENERAL_STATS
-				DeathlogDataCopy.PRECOMPUTED_LOG_NORMAL_PARAMS = deathlog_precomputed.PRECOMPUTED_LOG_NORMAL_PARAMS
-				DeathlogDataCopy.PRECOMPUTED_LOG_NORMAL_PARAMS_BY_CAUSE = deathlog_precomputed.PRECOMPUTED_LOG_NORMAL_PARAMS_BY_CAUSE
-				DeathlogDataCopy.PRECOMPUTED_KAPLAN_MEIER = deathlog_precomputed.PRECOMPUTED_KAPLAN_MEIER
-				DeathlogDataCopy.PRECOMPUTED_KAPLAN_MEIER_BY_CAUSE = deathlog_precomputed.PRECOMPUTED_KAPLAN_MEIER_BY_CAUSE
-				DeathlogDataCopy.PRECOMPUTED_MOST_DEADLY_BY_ZONE = deathlog_precomputed.PRECOMPUTED_MOST_DEADLY_BY_ZONE
-				DeathlogDataCopy.PRECOMPUTED_CAUSE_STATS = deathlog_precomputed.PRECOMPUTED_CAUSE_STATS
-				DeathlogDataCopy.PRECOMPUTED_PURGES = deathlog_precomputed.PRECOMPUTED_PURGES
-			end
-		end
-
-		if DeathNotificationLibDataCopy.HEATMAP_INTENSITY and DeathNotificationLibDataCopy.HEATMAP_INTENSITY_BY_CAUSE and DeathNotificationLibDataCopy.HEATMAP_CREATURE_SUBSET then
-			deathlog_precomputed.HEATMAP_INTENSITY = nil
-			deathlog_precomputed.HEATMAP_INTENSITY_BY_CAUSE = nil
-			deathlog_precomputed.HEATMAP_CREATURE_SUBSET = nil
-		else
-			if not (version == deathlog_precomputed.DNLD_VERSION and deathlog_precomputed.HEATMAP_INTENSITY and deathlog_precomputed.HEATMAP_INTENSITY_BY_CAUSE and deathlog_precomputed.HEATMAP_CREATURE_SUBSET) then
-				-- skull_locs is derived once and shared by the three heatmap
-				-- steps; hold it in an upvalue populated by the first step.
-				local heatmap_skull_locs
-				precompute_steps[#precompute_steps + 1] = function()
-					heatmap_skull_locs = Deathlog_calculateSkullLocs(deathlog_data)
-					deathlog_precomputed.DNLD_VERSION = version
-				end
-				precompute_steps[#precompute_steps + 1] = function() deathlog_precomputed.HEATMAP_INTENSITY = Deathlog_calculateHeatmapIntensity(heatmap_skull_locs) end
-				precompute_steps[#precompute_steps + 1] = function() deathlog_precomputed.HEATMAP_INTENSITY_BY_CAUSE = Deathlog_calculateHeatmapIntensityByCause(heatmap_skull_locs) end
-				precompute_steps[#precompute_steps + 1] = function() deathlog_precomputed.HEATMAP_CREATURE_SUBSET = Deathlog_calculateHeatmapCreatureSubset(heatmap_skull_locs) end
-			end
-
-			precompute_steps[#precompute_steps + 1] = function()
-				DeathNotificationLibDataCopy.HEATMAP_INTENSITY = deathlog_precomputed.HEATMAP_INTENSITY
-				DeathNotificationLibDataCopy.HEATMAP_INTENSITY_BY_CAUSE = deathlog_precomputed.HEATMAP_INTENSITY_BY_CAUSE
-				DeathNotificationLibDataCopy.HEATMAP_CREATURE_SUBSET = deathlog_precomputed.HEATMAP_CREATURE_SUBSET
-			end
-		end
+		DeathNotificationLib.HookOnSelfDeath(Deathlog_noteOwnDeath)
 
 		local function finalizePrecompute()
 			loadWidgets()
@@ -670,6 +852,7 @@ local function handleEvent(self, event, ...)
 				Deathlog_CheckCTA()
 				Deathlog_startInvalidEntryCleanse()
 				Deathlog_startHunterCleanup()
+				Deathlog_startArchiveRollover()
 				DeathNotificationLib.UpdateDeathAlert()
 			end)
 
@@ -680,51 +863,7 @@ local function handleEvent(self, event, ...)
 			end
 		end
 
-		if #precompute_steps == 0 then
-			-- Cache is valid: run synchronously, no visible startup delay.
-			finalizePrecompute()
-		else
-			-- Run the heavy steps inside a coroutine. Each step's inner loops call
-			-- Deathlog_YieldCheck(), which yields the coroutine every N processed
-			-- entries. The driver resumes the coroutine once per frame via
-			-- C_Timer.After(0, ...), so every chunk of work runs with a fresh
-			-- per-frame script-time budget and no single frame trips the
-			-- "script ran too long" limit — even for a single heavy function.
-			local co = coroutine.create(function()
-				for i = 1, #precompute_steps do
-					precompute_steps[i]()
-				end
-			end)
-
-			local function resumePrecompute()
-				if Deathlog_SetYieldActive then Deathlog_SetYieldActive(true) end
-				local ok, err = coroutine.resume(co)
-				if Deathlog_SetYieldActive then Deathlog_SetYieldActive(false) end
-
-				if not ok then
-					-- A step errored; stop the async run and surface the error, but
-					-- still finalize so widgets/counters initialize (they degrade
-					-- gracefully when a precomputed table is missing). Finalize on a
-					-- fresh frame so widget creation gets a full script budget.
-					geterrorhandler()(err)
-					C_Timer.After(0, finalizePrecompute)
-					return
-				end
-
-				if coroutine.status(co) == "dead" then
-					-- Run finalize (loadWidgets etc.) on its OWN frame rather than
-					-- inline: the frame that just resumed the coroutine already spent
-					-- part of its script budget on the final compute chunk, and
-					-- building the minilog widgets in that same frame could still
-					-- trip the "script ran too long" limit.
-					C_Timer.After(0, finalizePrecompute)
-				else
-					C_Timer.After(0, resumePrecompute)
-				end
-			end
-
-			resumePrecompute()
-		end
+		runPrecompute(buildPrecomputeSteps(false), finalizePrecompute)
 	end
 end
 
@@ -800,6 +939,21 @@ local function printVersions()
 end
 Deathlog_PrintVersions = printVersions
 
+local function recomputeLocalStats()
+	if has_shipped_stats and has_shipped_heatmaps then
+		DEFAULT_CHAT_FRAME:AddMessage("|cffffd200Deathlog:|r statistics and heatmaps come from the bundled data, so there is nothing to recompute.")
+		return
+	end
+	if precompute_running or not deathlog_initialized then
+		DEFAULT_CHAT_FRAME:AddMessage("|cffffd200Deathlog:|r statistics are still being computed. Try again in a moment.")
+		return
+	end
+	DEFAULT_CHAT_FRAME:AddMessage("|cffffd200Deathlog:|r recomputing statistics and heatmaps from your log...")
+	runPrecompute(buildPrecomputeSteps(true), function()
+		DEFAULT_CHAT_FRAME:AddMessage("|cffffd200Deathlog:|r statistics and heatmaps are up to date. Reopen the Deathlog window to see them.")
+	end)
+end
+
 local function SlashHandler(msg, editbox)
 	local command, arg = string.match(string.lower(msg or ""), "^%s*(%S*)%s*(.-)%s*$")
 	command = command or ""
@@ -825,6 +979,8 @@ local function SlashHandler(msg, editbox)
 		handleHiddenCommand(command, raw_arg)
 	elseif command == "minilog" or command == "mini" or command == "mini-log" or command == "ml" then
 		handleMiniLogCommand(arg)
+	elseif command == "recompute" then
+		recomputeLocalStats()
 	else
 		DeathlogShowMenu(deathlog_data, DeathlogDataCopy.PRECOMPUTED_GENERAL_STATS, DeathlogDataCopy.PRECOMPUTED_LOG_NORMAL_PARAMS)
 	end
@@ -836,12 +992,13 @@ SlashCmdList["DEATHLOG"] = SlashHandler
 local deathlog_event_handler = CreateFrame("Frame", "deathlog", nil, "BackdropTemplate")
 deathlog_event_handler:RegisterEvent("ADDON_LOADED")
 deathlog_event_handler:RegisterEvent("PLAYER_ENTERING_WORLD")
+deathlog_event_handler:RegisterEvent("PLAYER_LOGOUT")
 
 deathlog_event_handler:SetScript("OnEvent", handleEvent)
 
 -- reset leaked SetWhoToUi on chat shift-click
 hooksecurefunc("SetItemRef", function(link)
-	if IsShiftKeyDown() and type(link) == "string" and string.sub(link, 1, 6) == "player" then
+	if IsShiftKeyDown() and type(link) == "string" and not Deathlog_isSecret(link) and string.sub(link, 1, 6) == "player" then
 		C_FriendList.SetWhoToUi(false)
 	end
 end)
@@ -871,12 +1028,15 @@ local options = {
 			func = function()
 				wipe(deathlog_data)
 				wipe(deathlog_data_map)
+				if Deathlog_menuRefreshSearchResults then
+					Deathlog_menuRefreshSearchResults()
+				end
 			end,
 		},
 		peer_reporting = {
 			type = "toggle",
 			name = "Allow peer-reported deaths",
-			desc = "When enabled, deaths reported by party/raid members and tarnished soul detections from other players are accepted. When disabled, only self-reported deaths and Blizzard's hardcore death channel notifications are shown.",
+			desc = "When enabled, deaths that another player reports for the victim, such as a party or raid member's death or a tarnished soul detection, are added to your log and can show a death alert. When disabled, those reports are ignored; self-reported deaths, Blizzard's hardcore death notifications and database sync still arrive. This setting is shared with other addons that use DeathNotificationLib: while any of them allows peer reports, they are accepted.",
 			width = 1.3,
 			order = 10,
 			get = function()
@@ -892,14 +1052,11 @@ local options = {
 		accept_legacy_messages = {
 			type = "toggle",
 			name = "Accept legacy protocol messages",
-			desc = "When enabled, death messages from older addon versions (v0–v2 protocol) are accepted. When disabled, only current (v3) protocol messages are processed.",
+			desc = "Off by default. When enabled, death messages from older addon versions (v0–v2 protocol) are accepted. When disabled, only current (v3) protocol messages are processed. Like peer reports, this setting is shared with other addons that use DeathNotificationLib.",
 			width = 1.5,
 			order = 20,
 			get = function()
-				if deathlog_settings["legacy_messages"] == nil then
-					deathlog_settings["legacy_messages"] = true
-				end
-				return deathlog_settings["legacy_messages"]
+				return deathlog_settings["legacy_messages"] == true
 			end,
 			set = function()
 				deathlog_settings["legacy_messages"] = not deathlog_settings["legacy_messages"]
@@ -955,8 +1112,8 @@ local options = {
 		},
 		share_playtime = {
 			type = "toggle",
-			name = "Include playtime in death report",
-			desc = "When enabled, your total /played time is included in your death broadcast so others can see how long you survived. Disable this if you prefer to keep your playtime private.",
+			name = "Keep playtime on logged deaths",
+			desc = "Only controls whether the /played time that comes with a death is kept on deaths saved in your own log (and in their death alerts). When disabled, it is removed before they are saved. This never hides your own /played time from your death message.",
 			width = 1.3,
 			order = 37,
 			get = function()
@@ -967,6 +1124,46 @@ local options = {
 			end,
 			set = function()
 				deathlog_settings["share_playtime"] = not deathlog_settings["share_playtime"]
+			end,
+		},
+		personal_log = {
+			type = "toggle",
+			name = "Keep a personal death log",
+			desc = "Your own deaths are kept in a personal log that all your characters on this account share (each game version has its own), saved in Deathlog.lua. Hardcore deaths still go to the shared log as well; the personal copies are never broadcast or synced, and wowdeathmap.com ignores them if you share the file. The newest 5,000 across the account are kept. Find them in the Search tab under Server: Personal.",
+			width = 1.3,
+			order = 38,
+			hidden = function()
+				return not Deathlog_isPersonalLogAvailable()
+			end,
+			get = function()
+				if deathlog_settings["personal_log"] == nil then
+					deathlog_settings["personal_log"] = true
+				end
+				return deathlog_settings["personal_log"]
+			end,
+			set = function()
+				deathlog_settings["personal_log"] = not deathlog_settings["personal_log"]
+			end,
+		},
+		clear_personal_log = {
+			type = "execute",
+			name = "Clear personal log",
+			desc = "Remove every death from the personal log, for all characters on this account.",
+			width = 1.3,
+			order = 39,
+			confirm = true,
+			confirmText = "Remove every death from the personal log of all characters on this account? This cannot be undone.",
+			hidden = function()
+				return not Deathlog_isPersonalLogAvailable()
+			end,
+			disabled = function()
+				return Deathlog_personalLogCount() == 0
+			end,
+			func = function()
+				Deathlog_clearPersonalLog()
+				if Deathlog_menuRefreshSearchResults then
+					Deathlog_menuRefreshSearchResults()
+				end
 			end,
 		},
 		show_minimap_button = {
@@ -1104,7 +1301,7 @@ sync_options = {
 		sync_window_days = {
 			type = "range",
 			name = "Sync window (days)",
-			desc = "Only sync entries from the last N days. Larger windows exchange more data but cover more history. Set to -1 to sync ALL data.",
+			desc = "Only sync entries from the last N days. Larger windows exchange more data but cover more history. Set to -1 to sync ALL data (up to 30 days once older deaths are archived). Days that moved into the archive are never synced back.",
 			width = 1.5,
 			min = -1,
 			max = 30,
@@ -1185,6 +1382,36 @@ sync_options = {
 			order = 50,
 			func = function()
 				DeathNotificationLib.SyncStatus()
+			end,
+		},
+		db_size_header = {
+			type = "header",
+			name = "Database size",
+			order = 60,
+		},
+		db_size = {
+			type = "description",
+			name = function()
+				return Deathlog_archiveSizeText()
+			end,
+			fontSize = "medium",
+			order = 61,
+		},
+		archive_live_cap = {
+			type = "range",
+			name = "Live log size (deaths)",
+			desc = "How many of the newest deaths stay loaded, across all realms. Older deaths move into a packed archive inside Deathlog.lua; they still show up when you search or filter, and they are included when you share the file. If the file gets close to what WoW can load, Deathlog archives more on its own.",
+			width = 1.5,
+			min = 10000,
+			max = 50000,
+			step = 1000,
+			order = 62,
+			get = function()
+				return Deathlog_archiveLiveCap()
+			end,
+			set = function(_, val)
+				deathlog_settings["archive_live_cap"] = val
+				Deathlog_startArchiveRollover()
 			end,
 		},
 	},

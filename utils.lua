@@ -24,6 +24,12 @@ Deathlog_EXPANSION_LEVEL = Deathlog_IS_FOREVER and 0 or (GetExpansionLevel and G
 --
 --
 
+---@param value any
+---@return boolean
+function Deathlog_isSecret(value)
+	return issecretvalue ~= nil and issecretvalue(value)
+end
+
 DeathlogDataCopy = {}
 if DeathlogData then
 	DeathlogDataCopy.PRECOMPUTED_GENERAL_STATS = DeathlogData.PRECOMPUTED_GENERAL_STATS
@@ -505,6 +511,15 @@ function DeathlogGetCachedSource(entry)
 	return _source
 end
 
+--- For a table that is reused for one entry after another; keeps its cache table for the next one.
+function Deathlog_forgetCachedSource(entry)
+	local sc = source_cache[entry]
+	if sc then
+		sc.cached = nil
+		sc.predicted = nil
+	end
+end
+
 function Deathlog_GetSourceKindOptions()
 	return source_kind_options
 end
@@ -765,7 +780,21 @@ end
 local entry_realm = setmetatable({}, { __mode = "k" })
 
 function Deathlog_getEntryRealm(entry)
+	if Deathlog_isPersonalEntry(entry) then
+		return Deathlog_personalEntryRealm(entry)
+	end
 	return (entry and entry_realm[entry]) or GetRealmName()
+end
+
+--- The name to whisper or ignore: Name-Realm when the death happened on another realm.
+---@param entry table|nil
+---@return string|nil
+function Deathlog_getEntryChatName(entry)
+	local name = entry and entry["name"]
+	if not name then return nil end
+	local realm = Deathlog_getEntryRealm(entry)
+	if realm == GetRealmName() then return name end
+	return name .. "-" .. realm:gsub("[%s%-]", "")
 end
 
 --- Format a death count for a narrow table cell. Counts below 100k stay
@@ -817,7 +846,7 @@ function DeathlogFilter(_deathlog_data, filter)
 			Deathlog_YieldCheck()
 			if Deathlog_shouldShowEntry(entry) and filter(server_name, entry) then
 				filtered_death_log[server_name][checksum] = entry
-				entry_realm[entry] = server_name
+				entry_realm[entry] = server_name == Deathlog_PERSONAL_LOG_KEY and Deathlog_personalEntryRealm(entry) or server_name
 			end
 		end
 	end
@@ -1668,7 +1697,7 @@ function Deathlog_getEntrySenderForData(player_data)
 	if not player_data or not player_data["name"] then return nil end
 	if not (DeathNotificationLib and DeathNotificationLib.Fletcher16) then return nil end
 
-	local realmName = GetRealmName()
+	local realmName = Deathlog_getEntryRealm(player_data)
 	local sender, guid = Deathlog_getEntrySender(realmName, DeathNotificationLib.Fletcher16(player_data))
 	if sender then return sender, guid end
 

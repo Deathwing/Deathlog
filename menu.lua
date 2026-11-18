@@ -267,7 +267,9 @@ local function WPDropDownDemo_Menu(frame, level, menuList)
 		info.text, info.hasArrow, info.func, info.disabled = "Block user", false, blockUser, not canBlockUser()
 		UIDropDownMenu_AddButton(info)
 
-		Deathlog_addContextMenuReportItems(death_tomb_frame.clicked_player_data)
+		if not Deathlog_isPersonalEntry(death_tomb_frame.clicked_player_data) then
+			Deathlog_addContextMenuReportItems(death_tomb_frame.clicked_player_data)
+		end
 	end
 end
 
@@ -611,6 +613,7 @@ local function setDeathlogMenuLogData(data)
 	end
 end
 
+local _deathlog_source = {}
 local _deathlog_data = {}
 local _stats = {}
 local _log_normal_params = {}
@@ -673,13 +676,120 @@ local function Deathlog_GetSourceStatsCount(source_id)
 	return source_stats["num_entries"] or 0
 end
 
+-- Bumped at every filter change, so cached and late archive matches can tell they are stale.
+local filter_generation = 0
+local _get_archive_scope = nil -- Set by drawLogTab; returns whether to search the archive, and the realm the Server filter picked
+local archive_matches, archive_matches_gen, archive_matches_stamp, archive_matches_key = nil, nil, nil, nil
+local archive_search_key = nil
+local shown_filtered, shown_gen = nil, nil
+local ARCHIVE_WAIT_SECONDS = 0.15
+local archive_wait = nil
+
+local function passAll()
+	return true
+end
+
+--- Changes with the filter, the archive, and what Deathlog_shouldShowEntry() hides.
+local function archiveSearchKey(stamp)
+	local hidden = 0
+	for _ in pairs(deathlog_hidden_names or {}) do
+		hidden = hidden + 1
+	end
+	return filter_generation .. ":" .. stamp .. ":" .. hidden .. ":" .. tostring(deathlog_settings["addonless_logging"])
+end
+
+--- Also drops the cached matches: every caller leaves them stale or unused.
+local function cancelArchiveSearch()
+	archive_search_key, archive_wait = nil, nil
+	archive_matches, archive_matches_gen, archive_matches_stamp, archive_matches_key = nil, nil, nil, nil
+	shown_filtered = nil
+	Deathlog_archiveSearchCancel()
+end
+
+--- DeathlogFilter registers each match's realm and drops names hidden since the scan.
+local function withArchiveMatches(filtered, matches)
+	local view = {}
+	for _, entries in pairs(filtered) do
+		view[#view + 1] = entries
+	end
+	for _, entries in pairs(DeathlogFilter(matches, passAll)) do
+		view[#view + 1] = entries
+	end
+	return view
+end
+
+--- Archived matches join from the cache, or with the log matches when a fresh scan ends within ARCHIVE_WAIT_SECONDS; a slower scan shows the log matches first.
+local function showFilteredResults(filter)
+	local filtered = DeathlogFilter(_deathlog_data, filter)
+	local search, realm = false, nil
+	if _get_archive_scope and current_menu_group == "LogTab" then
+		search, realm = _get_archive_scope()
+	end
+	if not search then
+		cancelArchiveSearch()
+		setDeathlogMenuLogData(filtered)
+		return
+	end
+
+	local gen, stamp = filter_generation, Deathlog_archiveSearchStamp()
+	local key = archiveSearchKey(stamp)
+	shown_filtered, shown_gen = filtered, gen
+	local function stillShown()
+		return filter_generation == gen and shown_gen == gen and current_menu_group == "LogTab"
+			and deathlog_menu ~= nil and deathlog_menu:IsShown()
+	end
+	if key ~= archive_matches_key and key ~= archive_search_key then
+		local had_matches = archive_matches ~= nil and archive_matches_gen == gen
+		archive_search_key, archive_wait = key, nil
+		local started = Deathlog_archiveSearch(filter, function(matches)
+			-- Paging during the wait turned the previous list's pages.
+			local waited = archive_wait ~= nil
+			archive_search_key, archive_wait = nil, nil
+			archive_matches, archive_matches_gen, archive_matches_stamp, archive_matches_key = matches, gen, stamp, key
+			if not stillShown() then return end
+			clearDeathlogMenuLogData(not waited)
+			setDeathlogMenuLogData(withArchiveMatches(shown_filtered, matches))
+		end, realm)
+		if not started then
+			archive_search_key = nil
+			archive_matches, archive_matches_gen, archive_matches_stamp, archive_matches_key = {}, gen, stamp, key
+		elseif not had_matches then
+			local wait = {}
+			archive_wait = wait
+			C_Timer.After(ARCHIVE_WAIT_SECONDS, function()
+				if archive_wait ~= wait then return end
+				archive_wait = nil
+				if not stillShown() then return end
+				clearDeathlogMenuLogData()
+				setDeathlogMenuLogData(shown_filtered)
+			end)
+		end
+	end
+
+	local cached = archive_matches ~= nil and archive_matches_gen == gen
+	if cached and archive_matches_stamp ~= stamp and cached_sorted_results
+		and archive_matches_key == archiveSearchKey(archive_matches_stamp)
+	then
+		-- Deaths that just moved into the archive are in neither list yet, so the last list stays until the rescan ends.
+		displayPageFromCache()
+	elseif cached then
+		setDeathlogMenuLogData(withArchiveMatches(filtered, archive_matches))
+	elseif archive_wait then
+		displayPageFromCache()
+	else
+		setDeathlogMenuLogData(filtered)
+	end
+end
+
 local function refreshMenuSearchResults(skipPageReset)
+	_deathlog_data = Deathlog_withPersonalLog(_deathlog_source, true)
 	clearDeathlogMenuLogData(skipPageReset)
 	local active_filter = _get_active_filter and _get_active_filter()
 	if active_filter and (_get_filters_active and _get_filters_active()) then
-		setDeathlogMenuLogData(DeathlogFilter(_deathlog_data, active_filter))
+		showFilteredResults(active_filter)
 	else
-		setDeathlogMenuLogData(_deathlog_data)
+		cancelArchiveSearch()
+		setDeathlogMenuLogData(Deathlog_withPersonalLog(_deathlog_source))
 	end
 end
 
@@ -701,7 +811,11 @@ local function drawLogTab(container)
 	scroll_frame:SetLayout("Flow")
 	scroll_container:AddChild(scroll_frame)
 
+	filter_generation = filter_generation + 1
+	cancelArchiveSearch()
+
 	local server_filter = nil
+	local server_key = nil
 	local name_filter = nil
 	local class_filter = nil
 	local race_filter = nil
@@ -716,6 +830,10 @@ local function drawLogTab(container)
 		death_filter_mode = "all"
 	end
 	local filter = function(server_name, _entry)
+		-- Copies of shared-log deaths show only under Server: Personal.
+		if server_name == Deathlog_PERSONAL_LOG_KEY and server_key ~= server_name and Deathlog_isPersonalMirror(_entry) then
+			return false
+		end
 		if server_filter ~= nil then
 			if server_filter(server_name, _entry) == false then
 				return false
@@ -791,6 +909,21 @@ local function drawLogTab(container)
 	end
 	_get_active_filter = function() return filter end
 
+	-- Server and death filter alone would scan the whole archive for almost every death.
+	_get_archive_scope = function()
+		local content = name_filter ~= nil or guild_filter ~= nil or class_filter ~= nil
+			or race_filter ~= nil or zone_filter ~= nil
+			or min_level_filter ~= nil or max_level_filter ~= nil
+			or death_source_filter ~= nil or last_words_filter ~= nil
+		return content and server_key ~= Deathlog_PERSONAL_LOG_KEY, server_key
+	end
+
+	local function applyFilter()
+		filter_generation = filter_generation + 1
+		clearDeathlogMenuLogData()
+		showFilteredResults(filter)
+	end
+
 	local class_search_box = AceGUI:Create("Icon") ---@type AceGUIIcon
 	class_search_box:SetWidth(50)
 	class_search_box:SetHeight(50)
@@ -798,6 +931,10 @@ local function drawLogTab(container)
 	scroll_frame:AddChild(class_search_box)
 
 	--- Server dropdown
+	local function serverLabel(server_name)
+		return server_name == Deathlog_PERSONAL_LOG_KEY and Deathlog_L.personal_log_word or server_name
+	end
+
 	if font_container.server_dd == nil then
 		font_container.server_dd = CreateFrame("Frame", nil, font_container, "UIDropDownMenuTemplate")
 		font_container.server_dd.val = ""
@@ -814,12 +951,12 @@ local function drawLogTab(container)
 						return false
 					end
 				end
-				clearDeathlogMenuLogData()
-				setDeathlogMenuLogData(DeathlogFilter(_deathlog_data, filter))
+				server_key = key
+				applyFilter()
 			else
 				server_filter = nil
-				clearDeathlogMenuLogData()
-				setDeathlogMenuLogData(DeathlogFilter(_deathlog_data, filter))
+				server_key = nil
+				applyFilter()
 			end
 		end
 
@@ -830,9 +967,9 @@ local function drawLogTab(container)
 			table.insert(entries, { name = current_realm, value = current_realm })
 			added_servers[current_realm] = true
 		end
-		for server_name, _ in pairs(_deathlog_data) do
-			if not added_servers[server_name] then
-				table.insert(entries, { name = server_name, value = server_name })
+		for server_name, server_entries in pairs(_deathlog_data) do
+			if not added_servers[server_name] and (server_name ~= Deathlog_PERSONAL_LOG_KEY or next(server_entries)) then
+				table.insert(entries, { name = serverLabel(server_name), value = server_name })
 				added_servers[server_name] = true
 			end
 		end
@@ -851,7 +988,7 @@ local function drawLogTab(container)
 	end
 
 	font_container.server_dd:SetPoint("TOPLEFT", scroll_container.frame, "TOPLEFT", -5, -20)
-	UIDropDownMenu_SetText(font_container.server_dd, font_container.server_dd.val ~= "" and font_container.server_dd.val or "All")
+	UIDropDownMenu_SetText(font_container.server_dd, font_container.server_dd.val ~= "" and serverLabel(font_container.server_dd.val) or "All")
 	UIDropDownMenu_SetWidth(font_container.server_dd, 80)
 	UIDropDownMenu_Initialize(font_container.server_dd, serverDD)
 	UIDropDownMenu_JustifyText(font_container.server_dd, "LEFT")
@@ -883,12 +1020,10 @@ local function drawLogTab(container)
 						return false
 					end
 				end
-				clearDeathlogMenuLogData()
-				setDeathlogMenuLogData(DeathlogFilter(_deathlog_data, filter))
+				applyFilter()
 			else
 				race_filter = nil
-				clearDeathlogMenuLogData()
-				setDeathlogMenuLogData(DeathlogFilter(_deathlog_data, filter))
+				applyFilter()
 			end
 		end
 
@@ -943,12 +1078,10 @@ local function drawLogTab(container)
 						return false
 					end
 				end
-				clearDeathlogMenuLogData()
-				setDeathlogMenuLogData(DeathlogFilter(_deathlog_data, filter))
+				applyFilter()
 			else
 				class_filter = nil
-				clearDeathlogMenuLogData()
-				setDeathlogMenuLogData(DeathlogFilter(_deathlog_data, filter))
+				applyFilter()
 			end
 		end
 
@@ -1035,12 +1168,10 @@ local function drawLogTab(container)
 					end
 					return false
 				end
-				clearDeathlogMenuLogData()
-				setDeathlogMenuLogData(DeathlogFilter(_deathlog_data, filter))
+				applyFilter()
 			else
 				zone_filter = nil
-				clearDeathlogMenuLogData()
-				setDeathlogMenuLogData(DeathlogFilter(_deathlog_data, filter))
+				applyFilter()
 			end
 		end
 
@@ -1309,12 +1440,10 @@ local function drawLogTab(container)
 					end
 					return false
 				end
-				clearDeathlogMenuLogData()
-				setDeathlogMenuLogData(DeathlogFilter(_deathlog_data, filter))
+				applyFilter()
 			else
 				zone_filter = nil
-				clearDeathlogMenuLogData()
-				setDeathlogMenuLogData(DeathlogFilter(_deathlog_data, filter))
+				applyFilter()
 			end
 		end
 
@@ -1549,12 +1678,10 @@ local function drawLogTab(container)
 				end
 				return false
 			end
-			clearDeathlogMenuLogData()
-			setDeathlogMenuLogData(DeathlogFilter(_deathlog_data, filter))
+			applyFilter()
 		else
 			min_level_filter = nil
-			clearDeathlogMenuLogData()
-			setDeathlogMenuLogData(DeathlogFilter(_deathlog_data, filter))
+			applyFilter()
 		end
 	end)
 
@@ -1589,12 +1716,10 @@ local function drawLogTab(container)
 				end
 				return false
 			end
-			clearDeathlogMenuLogData()
-			setDeathlogMenuLogData(DeathlogFilter(_deathlog_data, filter))
+			applyFilter()
 		else
 			max_level_filter = nil
-			clearDeathlogMenuLogData()
-			setDeathlogMenuLogData(DeathlogFilter(_deathlog_data, filter))
+			applyFilter()
 		end
 	end)
 
@@ -1630,12 +1755,10 @@ local function drawLogTab(container)
 					return false
 				end
 			end
-			clearDeathlogMenuLogData()
-			setDeathlogMenuLogData(DeathlogFilter(_deathlog_data, filter))
+			applyFilter()
 		else
 			name_filter = nil
-			clearDeathlogMenuLogData()
-			setDeathlogMenuLogData(DeathlogFilter(_deathlog_data, filter))
+			applyFilter()
 		end
 	end)
 
@@ -1671,12 +1794,10 @@ local function drawLogTab(container)
 					return false
 				end
 			end
-			clearDeathlogMenuLogData()
-			setDeathlogMenuLogData(DeathlogFilter(_deathlog_data, filter))
+			applyFilter()
 		else
 			guild_filter = nil
-			clearDeathlogMenuLogData()
-			setDeathlogMenuLogData(DeathlogFilter(_deathlog_data, filter))
+			applyFilter()
 		end
 	end)
 
@@ -1713,12 +1834,10 @@ local function drawLogTab(container)
 					return false
 				end
 			end
-			clearDeathlogMenuLogData()
-			setDeathlogMenuLogData(DeathlogFilter(_deathlog_data, filter))
+			applyFilter()
 		else
 			death_source_filter = nil
-			clearDeathlogMenuLogData()
-			setDeathlogMenuLogData(DeathlogFilter(_deathlog_data, filter))
+			applyFilter()
 		end
 	end)
 
@@ -1749,8 +1868,7 @@ local function drawLogTab(container)
 				death_filter_mode = value
 				deathlog_settings["search_log_filter_mode"] = value
 				UIDropDownMenu_SetText(font_container.death_filter_dd, label)
-				clearDeathlogMenuLogData()
-				setDeathlogMenuLogData(DeathlogFilter(_deathlog_data, filter))
+				applyFilter()
 			end
 			UIDropDownMenu_AddButton(info)
 		end
@@ -1790,12 +1908,10 @@ local function drawLogTab(container)
 				return false
 			end
 
-			clearDeathlogMenuLogData()
-			setDeathlogMenuLogData(DeathlogFilter(_deathlog_data, filter))
+			applyFilter()
 		else
 			last_words_filter = nil
-			clearDeathlogMenuLogData()
-			setDeathlogMenuLogData(DeathlogFilter(_deathlog_data, filter))
+			applyFilter()
 		end
 	end)
 
@@ -1865,7 +1981,7 @@ local function drawLogTab(container)
 				if nameText and strtrim(nameText) ~= "" then
 					death_tomb_frame.map_id = font_strings[i].map_id
 					death_tomb_frame.coordinates = font_strings[i].map_id_coords_x and { font_strings[i].map_id_coords_x, font_strings[i].map_id_coords_y } or nil
-					death_tomb_frame.clicked_name = nameText
+					death_tomb_frame.clicked_name = Deathlog_getEntryChatName(font_strings[i].player_data) or nameText
 					death_tomb_frame.clicked_player_data = font_strings[i].player_data
 
 					local dropDown = CreateFrame("Frame", "WPDemoContextMenu", UIParent, "UIDropDownMenuTemplate")
@@ -2014,7 +2130,7 @@ local function drawLogTab(container)
 	font_container.refresh_button:SetPoint("RIGHT", deathlog_group.frame, "RIGHT", 0, 0)
 	font_container.refresh_button:SetScript("OnClick", function()
 		clearDeathlogMenuLogData(true)
-		setDeathlogMenuLogData(DeathlogFilter(_deathlog_data, filter))
+		showFilteredResults(filter)
 	end)
 	font_container.refresh_button:SetScript("OnEnter", function(self)
 		GameTooltip:SetOwner(self, "ANCHOR_TOP")
@@ -2838,6 +2954,7 @@ local function createDeathlogMenu()
 			info.func = function()
 				Deathlog_SetMenuSourceKind(value)
 				Deathlog_UpdateMenuSourceKindControl()
+				filter_generation = filter_generation + 1
 				refreshMenuSearchResults()
 				if current_menu_group == "StatisticsTab"
 					or current_menu_group == "InstanceStatisticsTab"
@@ -2874,6 +2991,9 @@ local function createDeathlogMenu()
 	deathlog_tabcontainer:SetLayout("Flow")
 
 	local function SelectGroup(container, event, group)
+		if group ~= "LogTab" then
+			cancelArchiveSearch()
+		end
 		current_menu_group = group
 		drawMenuGroup(container, group)
 		Deathlog_LayoutMenuSourceKindControl()
@@ -2886,6 +3006,13 @@ local function createDeathlogMenu()
 
 	deathlog_cta_banner = Deathlog_CTABannerContainer()
 	deathlog_cta_banner:SetParent(ace_deathlog_menu.frame)
+
+	-- Hiding UIParent (Alt+Z) also fires OnHide, but leaves the window shown.
+	ace_deathlog_menu.frame:HookScript("OnHide", function(self)
+		if not self:IsShown() then
+			cancelArchiveSearch()
+		end
+	end)
 
 	-- Persist window position and scale across reloads via SavedVariables
 	deathlog_settings.menu_status = deathlog_settings.menu_status or {}
@@ -2902,7 +3029,7 @@ function DeathlogShowMenu(deathlog_data, stats, log_normal_params)
 	deathlog_menu:Show()
 	deathlog_cta_banner.updateMenuElement(deathlog_menu.frame)
 	deathlog_tabcontainer:SelectTab("LogTab")
-	_deathlog_data = deathlog_data
+	_deathlog_source = deathlog_data
 	_stats = stats
 	_log_normal_params = log_normal_params
 	_cause_stats = DeathlogDataCopy.PRECOMPUTED_CAUSE_STATS or {}
@@ -2923,6 +3050,7 @@ function DeathlogHideMenu()
 		_auto_refresh_ticker:Cancel()
 		_auto_refresh_ticker = nil
 	end
+	cancelArchiveSearch()
 	if deathlog_menu then
 		deathlog_menu:Hide()
 	end

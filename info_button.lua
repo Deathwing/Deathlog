@@ -27,6 +27,7 @@ Deathlog_getHardcoreCharacterState() from hardcore_state.lua.
 --]]
 
 local HC_STATE = DeathNotificationLib.HC_STATE
+local IS_HARDCORE_REALM = DeathNotificationLib.IS_HARDCORE_REALM
 local IS_SOUL_OF_IRON_REALM = DeathNotificationLib.IS_SOUL_OF_IRON_REALM
 
 --- Append "Update Available" lines to the current GameTooltip when a newer
@@ -42,6 +43,43 @@ local function appendUpdateAvailableTooltip()
 	GameTooltip:AddLine(string.format("v%s >> v%s", current, newer), 1, 0.8, 0)
 	GameTooltip:AddLine("Click to choose an official download source.", 0.7, 0.7, 0.7)
 	return true
+end
+
+local function addPersonalLogSharedLines()
+	GameTooltip:AddLine(Deathlog_L.info_personal_log_shared, 0.7, 0.7, 0.7)
+	GameTooltip:AddLine(Deathlog_L.info_personal_log_saved, 0.7, 0.7, 0.7)
+end
+
+---@param with_stats_line boolean
+local function addNormalCharacterLines(with_stats_line)
+	if with_stats_line then
+		if DeathlogData and DeathlogData.PRECOMPUTED_GENERAL_STATS then
+			GameTooltip:AddLine(Deathlog_L.info_normal_stats, 0.7, 0.7, 0.7)
+		elseif Deathlog_IS_FOREVER then
+			GameTooltip:AddLine(Deathlog_L.info_no_forever_data, 1, 1, 0.5)
+		end
+	end
+	if not Deathlog_isPersonalLogAvailable() then
+		return
+	end
+	if Deathlog_isPersonalLogEnabled() then
+		GameTooltip:AddLine(Deathlog_L.info_personal_log_on, 0.7, 0.7, 0.7)
+		addPersonalLogSharedLines()
+	else
+		GameTooltip:AddLine(Deathlog_L.info_personal_log_off, 0.7, 0.7, 0.7)
+	end
+end
+
+local function addHardcorePersonalLogLine()
+	if not Deathlog_isPersonalLogAvailable() then
+		return
+	end
+	if Deathlog_isPersonalLogEnabled() then
+		GameTooltip:AddLine(Deathlog_L.info_personal_log_hardcore_on, 0.7, 0.7, 0.7)
+		addPersonalLogSharedLines()
+	else
+		GameTooltip:AddLine(Deathlog_L.info_personal_log_hardcore_off, 0.7, 0.7, 0.7)
+	end
 end
 
 function Deathlog_createInfoButton(container, with_events, offset_x, offset_y)
@@ -79,6 +117,11 @@ function Deathlog_createInfoButton(container, with_events, offset_x, offset_y)
 			end
 
 			local state = Deathlog_getHardcoreCharacterState("player")
+			-- Any death sets NOT_HARDCORE_ANYMORE; without a hardcore realm, addon or Soul of Iron the character never was hardcore.
+			if state == HC_STATE.NOT_HARDCORE_ANYMORE and not IS_HARDCORE_REALM and not Deathlog_getExternalHardcoreAddon()
+				and not (IS_SOUL_OF_IRON_REALM and Deathlog_hadSoulOfIron()) then
+				state = HC_STATE.NOT_HARDCORE
+			end
 			local has_update = DeathNotificationLib.GetNewerAddonVersion("Deathlog") ~= nil
 			info_button:SetScript("OnClick", has_update and function()
 				Deathlog_ShowUpdateSources(DeathNotificationLib.GetNewerAddonVersion("Deathlog"))
@@ -97,7 +140,12 @@ function Deathlog_createInfoButton(container, with_events, offset_x, offset_y)
 					-- Normally hidden when Hardcore — but show for update notification
 					info_button.deathlog_hc_state_func = function(self)
 						GameTooltip:ClearLines()
-						GameTooltip:AddLine("Deathlog", 1, 0.8, 0, true)
+						GameTooltip:AddLine("Death Logging Status", 1, 0.8, 0, true)
+						GameTooltip:AddLine(" ")
+						GameTooltip:AddLine("Status: |cff44FF44" .. Deathlog_L.info_hardcore_status .. "|r")
+						GameTooltip:AddLine(" ")
+						GameTooltip:AddLine(Deathlog_L.info_hardcore_logged, 0.7, 0.7, 0.7)
+						addHardcorePersonalLogLine()
 						appendUpdateAvailableTooltip()
 					end
 					info_button:Show()
@@ -115,13 +163,16 @@ function Deathlog_createInfoButton(container, with_events, offset_x, offset_y)
 					if isExternal then
 						GameTooltip:AddLine("Your hardcore journey tracked by " .. isExternal, 0.7, 0.7, 0.7)
 						GameTooltip:AddLine("has ended due to a death.", 0.7, 0.7, 0.7)
-					else
+					elseif IS_SOUL_OF_IRON_REALM then
 						GameTooltip:AddLine("You have lost your Hardcore status by acquiring", 0.7, 0.7, 0.7)
 						GameTooltip:AddLine("the \"Tarnished Soul\" debuff.", 0.7, 0.7, 0.7)
+					else
+						GameTooltip:AddLine("Your Hardcore journey has ended due to a death.", 0.7, 0.7, 0.7)
 					end
 					GameTooltip:AddLine(" ")
 					GameTooltip:AddLine("As a result, your deaths will no longer be", 0.7, 0.7, 0.7)
 					GameTooltip:AddLine("logged to the Deathlog system.", 0.7, 0.7, 0.7)
+					addNormalCharacterLines(false)
 					appendUpdateAvailableTooltip()
 				end
 				info_button:Show()
@@ -132,6 +183,8 @@ function Deathlog_createInfoButton(container, with_events, offset_x, offset_y)
 					GameTooltip:AddLine("Death Logging Status", 1, 0.8, 0, true)
 					GameTooltip:AddLine(" ")
 					GameTooltip:AddLine("Status: |cffFFFF00SOUL OF IRON REQUIRED|r")
+					GameTooltip:AddLine(" ")
+					addNormalCharacterLines(true)
 					GameTooltip:AddLine(" ")
 					GameTooltip:AddLine("To participate in death logging, you need:", 0.7, 0.7, 0.7)
 					GameTooltip:AddLine("• Get the \"Soul of Iron\" buff", 1, 1, 0.5)
@@ -147,16 +200,15 @@ function Deathlog_createInfoButton(container, with_events, offset_x, offset_y)
 					GameTooltip:ClearLines()
 					GameTooltip:AddLine("Death Logging Status", 1, 0.8, 0, true)
 					GameTooltip:AddLine(" ")
-					GameTooltip:AddLine("Status: |cffFF4444NOT SUPPORTED|r")
+					GameTooltip:AddLine("Status: |cffFFFF00" .. Deathlog_L.info_normal_status .. "|r")
 					GameTooltip:AddLine(" ")
-					GameTooltip:AddLine("Your realm or your hardcore addons are not currently supported by the", 0.7, 0.7, 0.7)
-					GameTooltip:AddLine("Deathlog addon.", 0.7, 0.7, 0.7)
+					addNormalCharacterLines(true)
 					GameTooltip:AddLine(" ")
-					GameTooltip:AddLine("Supported Realms:", 1, 1, 0.5)
+					GameTooltip:AddLine("Hardcore Realms:", 1, 1, 0.5)
 					GameTooltip:AddLine("• Classic Era Hardcore", 0.5, 1, 1)
 					GameTooltip:AddLine("• Burning Crusade - Soul of Iron", 0.5, 1, 1)
 					GameTooltip:AddLine(" ")
-					GameTooltip:AddLine("Supported Addons:", 1, 1, 0.5)
+					GameTooltip:AddLine("Hardcore Addons:", 1, 1, 0.5)
 					GameTooltip:AddLine("• Hardcore", 0.5, 1, 1)
 					GameTooltip:AddLine("• HardcoreTBC", 0.5, 1, 1)
 					GameTooltip:AddLine("• Ultra", 0.5, 1, 1)
