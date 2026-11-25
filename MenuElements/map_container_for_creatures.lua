@@ -90,6 +90,7 @@ function wrapped_map_container.updateMenuElement(scroll_frame, creature_id, stat
 	wrapped_map_container.map_container.darken_checkbox:Hide()
 	wrapped_map_container.map_container.darken_checkbox.label:Hide()
 	wrapped_map_container.map_container.map_hint:Hide()
+	wrapped_map_container.map_container.zone_links:Hide()
 	wrapped_map_container.map_container.overlay_highlight:Hide()
 	wrapped_map_container.map_container.allowInput = false
 end

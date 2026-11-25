@@ -18,6 +18,8 @@ You should have received a copy of the GNU General Public License
 along with the Deathlog AddOn. If not, see <http://www.gnu.org/licenses/>.
 --]]
 --
+local _, addon = ...
+
 local overlay_info = {
 	[1411] = {
 		["128:110:464:33"] = "271427",
@@ -939,6 +941,26 @@ if Deathlog_EXPANSION_LEVEL >= 1 then
 	end
 end
 
+-- Overlay tile files are at least 32 pixels wide and tall
+local min_overlay_file_size = 32
+-- Zones on their own map, which a click on the parent map cannot reach, keyed by their UiMap parent
+local detached_zones = {
+	[947] = { 1459, 1460, 1461 }, -- Alterac Valley, Warsong Gulch, Arathi Basin
+}
+if Deathlog_EXPANSION_LEVEL >= 1 then
+	detached_zones[1953] = { 1956 } -- Eye of the Storm
+end
+if Deathlog_IS_FOREVER then
+	overlay_info = addon.overlay_info_forever or {}
+	detached_zones = {
+		[947] = { 2521 }, -- Zephras Isle
+		[1414] = { 2524 }, -- Darkspear Islands
+		[1424] = { 1459 }, -- Alterac Valley
+		[1413] = { 1460 }, -- Warsong Gulch
+		[1417] = { 1461 }, -- Arathi Basin
+	}
+end
+
 
 local world_map_overlay = {}
 ---@type MenuElementContainer
@@ -1243,6 +1265,65 @@ function map_container.updateMenuElement(scroll_frame, current_map_id, stats_tbl
 		end)
 	end
 
+	if map_container.zone_links == nil then
+		map_container.zone_links = CreateFrame("Frame", nil, map_container)
+		map_container.zone_links:SetPoint("TOPRIGHT", map_container, "TOPRIGHT", -25, 25)
+		map_container.zone_links:SetSize(1, 24)
+		map_container.zone_links.buttons = {}
+	end
+	local zone_links = map_container.zone_links
+	local darken = map_container.darken_checkbox
+	local _, _, _, darken_x = darken:GetPoint()
+	-- A link that would reach the Darken label starts a new row below
+	local row_room = map_container:GetWidth() - 25 - 15 - darken_x - darken:GetWidth() - darken.label:GetStringWidth()
+	local link_count, row_start, row_width = 0, nil, 0
+	for _, map_id in ipairs(detached_zones[current_map_id] or {}) do
+		local info = C_Map.GetMapInfo(map_id)
+		if info and C_Map.GetMapArtLayerTextures(map_id, 1) then
+			link_count = link_count + 1
+			local button = zone_links.buttons[link_count]
+			if button == nil then
+				button = CreateFrame("Button", nil, zone_links)
+				button:SetHeight(24)
+				button.label = button:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+				button.label:SetPoint("RIGHT", button, "RIGHT", 0, 0)
+				button.label:SetFont(Deathlog_L.menu_font, 14, "OUTLINE")
+				button:SetScript("OnEnter", function(self)
+					self.label:SetTextColor(1, 1, 1)
+				end)
+				button:SetScript("OnLeave", function(self)
+					self.label:SetTextColor(1, 0.82, 0)
+				end)
+				zone_links.buttons[link_count] = button
+			end
+			button.label:SetTextColor(1, 0.82, 0)
+			button.label:SetText(info.name)
+			local width = button.label:GetStringWidth()
+			button:SetWidth(width)
+			button:ClearAllPoints()
+			if row_start == nil then
+				button:SetPoint("RIGHT", zone_links, "RIGHT", 0, 0)
+				row_start, row_width = button, width
+			elseif row_width + 15 + width <= row_room then
+				button:SetPoint("RIGHT", zone_links.buttons[link_count - 1], "LEFT", -15, 0)
+				row_width = row_width + 15 + width
+			else
+				button:SetPoint("TOPRIGHT", row_start, "BOTTOMRIGHT", 0, 0)
+				row_start, row_width = button, width
+			end
+			button:SetScript("OnClick", function()
+				overlay_highlight:Hide()
+				setMapRegion(map_id, info.name)
+				Deathlog_MapContainer_resetSkullSet()
+			end)
+			button:Show()
+		end
+	end
+	for i = link_count + 1, #zone_links.buttons do
+		zone_links.buttons[i]:Hide()
+	end
+	zone_links:SetShown(link_count > 0)
+
 	local layers = C_Map.GetMapArtLayerTextures(current_map_id, 1)
 	if layers == nil then
 		return
@@ -1283,6 +1364,8 @@ function map_container.updateMenuElement(scroll_frame, current_map_id, stats_tbl
 
 	local textures = getOverlayTextures(current_map_id)
 	if textures ~= nil then
+		-- Overlay offsets and sizes are in base-tile pixels: 4 tiles of 256 span the map width
+		local pixel = map_container:GetWidth() / 1024
 		local textureCount = 0
 		for k, v in ipairs(textures) do
 			local numTexturesWide = ceil(v["textureWidth"] / 256)
@@ -1303,7 +1386,7 @@ function map_container.updateMenuElement(scroll_frame, current_map_id, stats_tbl
 					if texturePixelHeight == 0 then
 						texturePixelHeight = 256
 					end
-					textureFileHeight = 16
+					textureFileHeight = min_overlay_file_size
 					while textureFileHeight < texturePixelHeight do
 						textureFileHeight = textureFileHeight * 2
 					end
@@ -1320,13 +1403,13 @@ function map_container.updateMenuElement(scroll_frame, current_map_id, stats_tbl
 						if texturePixelWidth == 0 then
 							texturePixelWidth = 256
 						end
-						textureFileWidth = 16
+						textureFileWidth = min_overlay_file_size
 						while textureFileWidth < texturePixelWidth do
 							textureFileWidth = textureFileWidth * 2
 						end
 					end
-					texture:SetWidth(texturePixelWidth * map_container:GetWidth() / 1000)
-					texture:SetHeight(texturePixelHeight * map_container:GetWidth() / 1000)
+					texture:SetWidth(texturePixelWidth * pixel)
+					texture:SetHeight(texturePixelHeight * pixel)
 					texture:SetTexCoord(
 						0,
 						texturePixelWidth / textureFileWidth,
@@ -1337,8 +1420,8 @@ function map_container.updateMenuElement(scroll_frame, current_map_id, stats_tbl
 						"TOPLEFT",
 						map_textures[1],
 						"TOPLEFT",
-						(v["offsetX"] + (256 * (k - 1))) * map_container:GetWidth() / 1000 - 5,
-						-(v["offsetY"] + (256 * (j - 1))) * map_container:GetWidth() / 1000 + 5
+						(v["offsetX"] + (256 * (k - 1))) * pixel,
+						-(v["offsetY"] + (256 * (j - 1))) * pixel
 					)
 					texture:SetTexture(v["fileDataIDs"][((j - 1) * numTexturesWide) + k], nil, nil, "TRILINEAR")
 					if map_container.darken_checkbox:GetChecked() then

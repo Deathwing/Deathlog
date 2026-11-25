@@ -30,6 +30,206 @@ function Deathlog_isSecret(value)
 	return issecretvalue ~= nil and issecretvalue(value)
 end
 
+local FOREVER_LAUNCH = 1793750400
+
+--- True on Forever for a death dated before its launch, which only a copied Classic settings folder holds.
+---@param date number|string|nil
+---@return boolean
+function Deathlog_predatesForever(date)
+	return Deathlog_IS_FOREVER and (tonumber(date) or 0) < FOREVER_LAUNCH
+end
+
+local REGION_BY_ID = { "US", "KR", "EU", "TW", "CN" }
+local forever_realm_key
+
+---@return string|nil region  two capital letters, as the client reports it
+local function liveRegion()
+	local name = GetCurrentRegionName and GetCurrentRegionName()
+	if not Deathlog_isSecret(name) and type(name) == "string" and name:match("^%u%u$") then
+		return name
+	end
+	local id = GetCurrentRegion and GetCurrentRegion()
+	if not Deathlog_isSecret(id) and REGION_BY_ID[id] then
+		return REGION_BY_ID[id]
+	end
+	local portal = GetCVar and GetCVar("portal")
+	if not Deathlog_isSecret(portal) and type(portal) == "string" and portal:match("^%a%a$") then
+		return portal:upper()
+	end
+end
+
+---@return string key
+---@return string|nil region  nil when the client reported none
+local function foreverKey()
+	local region = liveRegion()
+	local known = region
+	if not region then
+		local saved = type(deathlog_char_data) == "table" and deathlog_char_data._region
+		region = type(saved) == "string" and saved:match("^%u%u$") or nil
+	end
+	local key = "CAMWOW " .. (region or "?")
+	local hardcore = C_GameRules and C_GameRules.IsHardcoreActive and C_GameRules.IsHardcoreActive()
+	if not Deathlog_isSecret(hardcore) and hardcore == true then
+		key = key .. " HC"
+	end
+	if known and type(deathlog_char_data) == "table" then
+		deathlog_char_data._region = known
+	end
+	return key, known
+end
+
+--- Where this client files its deaths: the realm name on Classic; on realm-less WoW Forever "CAMWOW <region>", plus " HC" on Hardcore.
+---@return string
+function Deathlog_realmKey()
+	if not Deathlog_IS_FOREVER then
+		return GetRealmName()
+	end
+	if forever_realm_key then return forever_realm_key end
+	local key, region = foreverKey()
+	if region then
+		forever_realm_key = key
+	end
+	return key
+end
+
+--- Fixes the Forever key for the session, falling back to the saved region or "CAMWOW ?".
+function Deathlog_settleRealmKey()
+	if not Deathlog_IS_FOREVER then return end
+	forever_realm_key = (foreverKey())
+end
+
+--- "WoW Forever US" for a Forever key; a Classic realm name is returned as is.
+---@param key string
+---@return string
+function Deathlog_realmLabel(key)
+	if not Deathlog_IS_FOREVER or type(key) ~= "string" then return key end
+	local region, rest = key:match("^CAMWOW (%S+)(.*)$")
+	if not region or (rest ~= "" and rest ~= " HC") or not (region == "?" or region:match("^%u%u$")) then
+		return key
+	end
+	local hardcore = rest == " HC" and " Hardcore" or ""
+	if region == "?" then
+		return "WoW Forever" .. hardcore .. ", unknown region"
+	end
+	return "WoW Forever " .. region .. hardcore
+end
+
+---@param surname any
+---@return boolean
+local function plausibleSurname(surname)
+	return type(surname) == "string" and surname ~= "" and #surname <= 48 and not surname:find("[%d%c~|$\\;%%%-]")
+end
+
+--- Forever's "First Surname" from "First Surname", "First-Surname" or "First Surname-X".
+---@param name string
+---@return string full
+---@return string first
+---@return string|nil surname
+local function foreverFullName(name)
+	if name:find(" ", 1, true) then
+		name = name:match("^([^%-]*)"):gsub("%s+$", "")
+	else
+		local first, surname = name:match("^([^%-]+)%-([^%-]+)")
+		if first then name = first .. " " .. surname end
+	end
+	local first, surname = name:match("^(%S+) (.+)$")
+	return name, first or name, surname
+end
+
+--- "First Surname" on Forever when the entry carries its surname, else the stored name.
+---@param entry table|nil
+---@return string|nil
+function Deathlog_entryFullName(entry)
+	local name = entry and entry["name"]
+	if not Deathlog_IS_FOREVER or type(name) ~= "string" then return name end
+	local extra = entry["extra_data"]
+	local surname = type(extra) == "table" and extra["sn"]
+	if plausibleSurname(surname) then
+		return name .. " " .. surname
+	end
+	return name
+end
+
+---@param entry table
+---@return any
+local function storedSurname(entry)
+	local extra = entry["extra_data"]
+	return type(extra) == "table" and extra["sn"]
+end
+
+--- On Forever, entry is a death of `name` ("First Surname" or a first name); a surname only one side knows still matches.
+---@param entry table
+---@param name string
+---@return boolean
+function Deathlog_entryMatchesName(entry, name)
+	if not Deathlog_IS_FOREVER then return entry["name"] == name end
+	local _, first, surname = foreverFullName(name)
+	if entry["name"] ~= first then return false end
+	local stored = storedSurname(entry)
+	return not surname or not plausibleSurname(stored) or stored == surname
+end
+
+---@param a any
+---@param b any
+---@return boolean
+local function differ(a, b)
+	return a ~= nil and b ~= nil and a ~= b
+end
+
+--- Forever: a surname, class or race both entries carry and that differs makes them two players; always false elsewhere.
+---@param a table
+---@param b table
+---@return boolean
+function Deathlog_isOtherPlayer(a, b)
+	if not Deathlog_IS_FOREVER then return false end
+	local extra_a, extra_b = a["extra_data"], b["extra_data"]
+	local sn_a = type(extra_a) == "table" and plausibleSurname(extra_a["sn"]) and extra_a["sn"] or nil
+	local sn_b = type(extra_b) == "table" and plausibleSurname(extra_b["sn"]) and extra_b["sn"] or nil
+	return differ(sn_a, sn_b) or differ(a["class_id"], b["class_id"]) or differ(a["race_id"], b["race_id"])
+end
+
+--- Forever: the death the current log holds for a first name (the name map's), or for "First Surname" the newest with that surname, else the newest without one.
+---@param name string
+---@return table|nil entry
+---@return string|nil checksum
+function Deathlog_findEntryByName(name)
+	if type(name) ~= "string" then return nil end
+	local key = Deathlog_realmKey()
+	local db, map = deathlog_data[key], deathlog_data_map[key]
+	if not (db and map) then return nil end
+	local _, first, surname = foreverFullName(name)
+	local checksum = map[first]
+	local entry = checksum and db[checksum]
+	if not surname and type(entry) == "table" and entry["name"] == first then
+		return entry, checksum
+	end
+	-- The map holds the latest death of the first name, which can be another player's or lack the surname.
+	local best, best_cs, best_exact
+	local function consider(cs)
+		local e = cs and db[cs]
+		if type(e) == "table" and Deathlog_entryMatchesName(e, name) then
+			local exact = not surname or storedSurname(e) == surname
+			if not best or (exact and not best_exact) or (exact == best_exact and (tonumber(e["date"]) or 0) > (tonumber(best["date"]) or 0)) then
+				best, best_cs, best_exact = e, cs, exact
+			end
+		end
+	end
+	consider(checksum)
+	for cs in pairs(Deathlog_checksumsForName(key, first)) do
+		consider(cs)
+	end
+	return best, best_cs
+end
+
+--- The name the dead player's addon broadcasts, which peers key their logs by: the first name of "First Surname" on Forever.
+---@param name string
+---@return string
+function Deathlog_broadcastName(name)
+	if not Deathlog_IS_FOREVER or type(name) ~= "string" then return name end
+	local _, first = foreverFullName(name)
+	return first
+end
+
 DeathlogDataCopy = {}
 if DeathlogData then
 	DeathlogDataCopy.PRECOMPUTED_GENERAL_STATS = DeathlogData.PRECOMPUTED_GENERAL_STATS
@@ -431,6 +631,10 @@ if Deathlog_EXPANSION_LEVEL >= 1 then
 	Deathlog_race_tbl["Blood Elf"] = 10
 	Deathlog_race_tbl["Draenei"] = 11
 end
+if Deathlog_IS_FOREVER then
+	Deathlog_race_tbl["High Order Skyborne"] = 95
+	Deathlog_race_tbl["Windshaper Skyborne"] = 96
+end
 -- sort function from stack overflow
 local function spairs(t, order)
 	local keys = {}
@@ -748,6 +952,9 @@ function Deathlog_shouldShowEntry(entry)
 	if entry == nil then
 		return false
 	end
+	if Deathlog_predatesForever(entry["date"]) then
+		return false
+	end
 	if deathlog_hidden_names and deathlog_hidden_names[entry["name"]] then
 		return false
 	end
@@ -783,17 +990,18 @@ function Deathlog_getEntryRealm(entry)
 	if Deathlog_isPersonalEntry(entry) then
 		return Deathlog_personalEntryRealm(entry)
 	end
-	return (entry and entry_realm[entry]) or GetRealmName()
+	return (entry and entry_realm[entry]) or Deathlog_realmKey()
 end
 
---- The name to whisper or ignore: Name-Realm when the death happened on another realm.
+--- The name to whisper or ignore: Name-Realm when the death happened on another realm, "First Surname" on Forever.
 ---@param entry table|nil
 ---@return string|nil
 function Deathlog_getEntryChatName(entry)
 	local name = entry and entry["name"]
 	if not name then return nil end
+	if Deathlog_IS_FOREVER then return Deathlog_entryFullName(entry) end
 	local realm = Deathlog_getEntryRealm(entry)
-	if realm == GetRealmName() then return name end
+	if realm == Deathlog_realmKey() then return name end
 	return name .. "-" .. realm:gsub("[%s%-]", "")
 end
 
@@ -1675,7 +1883,7 @@ end
 --- rows without going through Deathlog_forgetEntryOrigin, so this sweeps the
 --- remainder on login to keep the SavedVariable from growing without bound.
 function Deathlog_pruneEntryOrigins()
-	local realmName = GetRealmName()
+	local realmName = Deathlog_realmKey()
 	local realm_origins = deathlog_entry_origin and deathlog_entry_origin[realmName]
 	if not realm_origins then return end
 
@@ -1765,7 +1973,7 @@ end
 -- pass purged for unrelated reasons.
 
 local function dropHiddenNameEntries(player_name)
-	local realmName = GetRealmName()
+	local realmName = Deathlog_realmKey()
 	local db = deathlog_data and deathlog_data[realmName]
 	if not db then return end
 
@@ -1885,7 +2093,7 @@ end
 function Deathlog_getDisplaySender(player_data)
 	if not player_data then return nil end
 	local sender = Deathlog_getEntrySenderForData(player_data)
-	if sender and sender == player_data["name"] then return nil end
+	if sender and (sender == player_data["name"] or (Deathlog_IS_FOREVER and sender == Deathlog_entryFullName(player_data))) then return nil end
 	return sender
 end
 
@@ -1971,7 +2179,7 @@ function Deathlog_getEntryReportLine(player_data)
 	if not dnl_cs then
 		-- Merges rewrite fields but keep the original key, so the recomputed
 		-- checksum can also miss; fall back to identity-matching the stored row.
-		local db = deathlog_data and deathlog_data[GetRealmName()]
+		local db = deathlog_data and deathlog_data[Deathlog_realmKey()]
 		if db then
 			for stored_cs, mapped_cs in pairs(dnl_checksum_by_stored_key) do
 				if db[stored_cs] == player_data then
@@ -2021,6 +2229,7 @@ function Deathlog_addContextMenuReportItems(player_data)
 	local sender = targets.sender
 	local sender_guid = targets.sender_guid
 	local reported_by_third_party = sender ~= nil and sender ~= targets.name
+		and not (Deathlog_IS_FOREVER and sender == Deathlog_entryFullName(player_data))
 
 	local function addButton(text, func)
 		local info = UIDropDownMenu_CreateInfo()
@@ -2044,7 +2253,7 @@ function Deathlog_addContextMenuReportItems(player_data)
 	if targets.name and not reported_by_third_party then
 		addButton(
 			targets.name_profane and "|cffff4040Report name|r" or "Report player",
-			function() Deathlog_reportPlayer(targets.name) end
+			function() Deathlog_reportPlayer(Deathlog_IS_FOREVER and Deathlog_entryFullName(player_data) or targets.name) end
 		)
 	end
 

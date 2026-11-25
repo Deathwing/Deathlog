@@ -33,8 +33,14 @@ local function checkForEntryAndSetTooltip()
 		local text = _G["GameTooltipTextLeft1"]:GetText()
 		if text ~= nil and not Deathlog_isSecret(text) then
 			local _name = string.match(text, corpse_pattern)
-			if _name then
-				local realmName = GetRealmName()
+			if _name and Deathlog_IS_FOREVER then
+				local _entry = Deathlog_findEntryByName(_name)
+				if _entry then
+					Deathlog_setTooltipFromEntry(_entry)
+					GameTooltip:Show()
+				end
+			elseif _name then
+				local realmName = Deathlog_realmKey()
 				if deathlog_data[realmName] and deathlog_data_map[realmName] and deathlog_data_map[realmName][_name] then
 					local _entry = deathlog_data[realmName][deathlog_data_map[realmName][_name]]
 					Deathlog_setTooltipFromEntry(_entry)

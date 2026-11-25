@@ -2,6 +2,22 @@
 
 All notable changes to Deathlog will be documented in this file.
 
+## [0.7.1] - 2026-11-25
+
+### WoW Forever
+- Deaths are now kept per region ("WoW Forever US"); saved deaths move over automatically.
+- Players who share a first name are mixed up far less often.
+- Forever's explored areas on the zone map, and pages for Zephras Isle and Darkspear Islands.
+- Naxxramas is back in Instance Statistics.
+- Skyborne players show their race in the filter and mini log.
+- Deaths from a copied Classic settings folder no longer show up.
+
+### Fixes
+- Battleground statistics open from links on the map.
+- UltraHardcore deaths land in the right dungeon or battleground.
+- HardcoreTBC battleground deaths count under the battleground, with the killer.
+- Deaths at sea no longer count as Deadmines deaths.
+
 ## [0.7.0] - 2026-11-18
 
 ### New Features

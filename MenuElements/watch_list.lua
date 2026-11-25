@@ -42,7 +42,11 @@ local function EntryData(name, note)
 end
 
 local function isDead(_name)
-	local realmData = deathlog_data_map[GetRealmName()]
+	if Deathlog_IS_FOREVER then
+		local _, checksum = Deathlog_findEntryByName(_name)
+		return checksum
+	end
+	local realmData = deathlog_data_map[Deathlog_realmKey()]
 	return realmData and realmData[_name]
 end
 
@@ -274,7 +278,7 @@ local function checkAll()
 			deathlog_watchlist_entries[_name]["last_checked"] = last_time
 		end
 		if isDead(_name) == nil then
-			table.insert(channel_names, _name)
+			table.insert(channel_names, Deathlog_broadcastName(_name))
 		end
 	end
 	refreshFontData()
@@ -305,8 +309,8 @@ local function checkAll()
 			if deathlog_watchlist_entries[_name] then
 				deathlog_watchlist_entries[_name]["last_checked"] = GetServerTime()
 			end
-			DeathNotificationLib.QueryGuild(_name, "DLG")
-			DeathNotificationLib.QuerySay(_name, "DLG")
+			DeathNotificationLib.QueryGuild(Deathlog_broadcastName(_name), "DLG")
+			DeathNotificationLib.QuerySay(Deathlog_broadcastName(_name), "DLG")
 		end
 		idx = idx + 1
 	end, 20)
@@ -449,7 +453,7 @@ function watch_list_frame.updateMenuElement(scroll_frame)
 				return
 			end
 			GameTooltip_SetDefaultAnchor(GameTooltip, WorldFrame)
-			Deathlog_setTooltipFromEntry(deathlog_data[GetRealmName()][hash])
+			Deathlog_setTooltipFromEntry(deathlog_data[Deathlog_realmKey()][hash])
 			GameTooltip:Show()
 		end)
 
@@ -588,6 +592,14 @@ local function onWatchlistDeath(_player_data)
 		return
 	end
 	local _name = _player_data["name"]
+	if Deathlog_IS_FOREVER and not deathlog_watchlist_entries[_name] then
+		for watched in pairs(deathlog_watchlist_entries) do
+			if Deathlog_entryMatchesName(_player_data, watched) then
+				_name = watched
+				break
+			end
+		end
+	end
 	if deathlog_watchlist_entries[_name] then
 		deathlog_watchlist_entries[_name]["last_checked"] = GetServerTime()
 		local icon = deathlog_watchlist_entries[_name]["Icon"] or ""

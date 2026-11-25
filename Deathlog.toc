@@ -6,7 +6,7 @@
 ## X-License: GNU GPL3
 ## X-Category: Leveling,Guild
 ## Category: Hardcore
-## Version: 0.7.0
+## Version: 0.7.1
 ## X-Website: https://github.com/Deathwing/Deathlog
 ## X-Repository: https://github.com/Deathwing/Deathlog
 ## X-Curse-Project-ID: 1711471
@@ -78,6 +78,7 @@ embeds.xml
 utils.lua
 purge.lua
 archive.lua
+forever_realms.lua
 
 hardcore_state.lua
 personal_log.lua
@@ -85,6 +86,7 @@ update_sources.lua
 info_button.lua
 
 MenuElements/watch_list.lua
+MenuElements/map_overlays_forever.lua [AllowLoadGameType camelot][ExcludeLoadGameType standard, classic]
 MenuElements/map_container.lua
 MenuElements/map_container_for_creatures.lua
 MenuElements/creature_model_container.lua

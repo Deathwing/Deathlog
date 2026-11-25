@@ -760,7 +760,7 @@ end
 
 --- Runs independently of the Feign Death purge, which is expiry-gated.
 function Deathlog_startInvalidEntryCleanse()
-	local realmName = GetRealmName()
+	local realmName = Deathlog_realmKey()
 	local db = deathlog_data and deathlog_data[realmName]
 	if not db then return end
 
@@ -786,7 +786,7 @@ function Deathlog_startHunterCleanup()
 		return
 	end
 
-	local realmName = GetRealmName()
+	local realmName = Deathlog_realmKey()
 	local db = deathlog_data[realmName]
 	if not db then
 		if DEBUG then

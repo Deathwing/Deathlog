@@ -235,7 +235,7 @@ local function loadWidgets()
 end
 
 function Deathlog_EntryCounts()
-	local realm = GetRealmName()
+	local realm = Deathlog_realmKey()
 	if not realm then
 		return nil
 	end
@@ -256,7 +256,7 @@ local function initEntryCounters()
 	local total = 0
 	local self_death = 0
 	local blizzard = 0
-	for _, entry in pairs(deathlog_data[GetRealmName()] or {}) do
+	for _, entry in pairs(deathlog_data[Deathlog_realmKey()] or {}) do
 		total = total + 1
 		if entry["class_id"] and entry["race_id"] then
 			self_death = self_death + 1
@@ -338,20 +338,30 @@ function Deathlog_forgetNameIndex(realmName, name, checksum)
 	end
 end
 
+--- The keys a realm's log may hold deaths of `name` under; stale keys are possible.
+---@param realmName string
+---@param name string
+---@return table<string, boolean>
+function Deathlog_checksumsForName(realmName, name)
+	ensureNameIndex(realmName)
+	return name_index[realmName][name] or {}
+end
+
 --- The stored shared-log death of `name` within the dedup window of `date`, if any.
 ---@param name string
 ---@param date number
 ---@param level number
+---@param probe table|nil  Forever: the death itself, so another player with this first name is skipped
 ---@return table|nil entry
 ---@return string|nil checksum
-function Deathlog_findSharedDeath(name, date, level)
-	local realmName = GetRealmName()
+function Deathlog_findSharedDeath(name, date, level, probe)
+	local realmName = Deathlog_realmKey()
 	local entries = deathlog_data[realmName]
 	if not entries then return nil end
 	ensureNameIndex(realmName)
 	for cs in pairs(name_index[realmName][name] or {}) do
 		local entry = entries[cs]
-		if entry then
+		if entry and not (probe and Deathlog_isOtherPlayer(entry, probe)) then
 			local window = DeathNotificationLib.GetDedupWindow(math.max(level, tonumber(entry["level"]) or 0))
 			if math.abs(date - (tonumber(entry["date"]) or 0)) <= window then
 				return entry, cs
@@ -363,7 +373,7 @@ end
 --- Returns true if player_data represents a known-fake (i.e. hunter feign-death bug) or purged death and should be suppressed.
 --- Checks static and runtime purge lists, plus identical map_pos against all stored entries for the same player (a reliable fabrication signal).
 local function deathlog_isFilteredEntry(player_data)
-	local realm = GetRealmName()
+	local realm = Deathlog_realmKey()
 	local cs = DeathNotificationLib.Fletcher16(player_data)
 
 	if deathlog_hidden_names[player_data["name"]] then
@@ -379,7 +389,7 @@ local function deathlog_isFilteredEntry(player_data)
 		return true
 	end
 
-	if Deathlog_isArchived(realm, cs, player_data["date"]) then
+	if Deathlog_isArchived(realm, cs, player_data["date"], player_data) then
 		return true
 	end
 
@@ -388,7 +398,7 @@ local function deathlog_isFilteredEntry(player_data)
 	if new_pos and pname and name_index[realm] and name_index[realm][pname] then
 		for existing_cs, _ in pairs(name_index[realm][pname]) do
 			local stored = deathlog_data[realm] and deathlog_data[realm][existing_cs]
-			if stored and stored["map_pos"] == new_pos then
+			if stored and stored["map_pos"] == new_pos and not Deathlog_isOtherPlayer(stored, player_data) then
 				return true
 			end
 		end
@@ -399,6 +409,31 @@ end
 
 local deathAlertWhitelist = setmetatable({}, { __mode = "k" })
 
+--- Forever: another death stored under the checksum goes to the archive, or the new one when it is the older; false when the new one must not go live.
+---@param realmName string
+---@param checksum string
+---@param player_data table
+---@return boolean
+local function makeRoomForEntry(realmName, checksum, player_data)
+	local db = deathlog_data[realmName]
+	local have = db[checksum]
+	if type(have) ~= "table" or have == player_data then return true end
+	local level = math.max(tonumber(have["level"]) or 0, tonumber(player_data["level"]) or 0)
+	local d_have, d_new = tonumber(have["date"]) or 0, tonumber(player_data["date"]) or 0
+	if not Deathlog_isOtherPlayer(have, player_data) and math.abs(d_have - d_new) <= DeathNotificationLib.GetDedupWindow(level) then
+		return true
+	end
+	if d_new < d_have then
+		Deathlog_archiveRecord(realmName, checksum, player_data)
+		return false
+	end
+	if not Deathlog_archiveRecord(realmName, checksum, have) then return false end
+	db[checksum] = nil
+	Deathlog_forgetEntryOrigin(realmName, checksum)
+	Deathlog_forgetNameIndex(realmName, have["name"], checksum)
+	return true
+end
+
 local function newEntry(_player_data, _checksum, num_peer_checks, in_guild, source)
 	if source == SOURCE.LOCAL_SELF then
 		Deathlog_addPersonalEntry(_player_data, _checksum)
@@ -406,7 +441,7 @@ local function newEntry(_player_data, _checksum, num_peer_checks, in_guild, sour
 	end
 	if Deathlog_isPersonalEntry(_player_data) then return end
 
-	local realmName = GetRealmName()
+	local realmName = Deathlog_realmKey()
 
 	if deathlog_data[realmName] == nil then
 		deathlog_data[realmName] = {}
@@ -462,7 +497,7 @@ local function newEntry(_player_data, _checksum, num_peer_checks, in_guild, sour
 			if entry then
 				local effective_level = math.max(tonumber(_player_data["level"]) or 0, tonumber(entry["level"]) or 0)
 				local time_diff = math.abs(current_time - (entry["date"] or 0))
-				if time_diff <= DeathNotificationLib.GetDedupWindow(effective_level) then
+				if time_diff <= DeathNotificationLib.GetDedupWindow(effective_level) and not Deathlog_isOtherPlayer(entry, _player_data) then
 					local existing_quality = DeathNotificationLib.EntryQuality(entry)
 					local new_quality = DeathNotificationLib.EntryQuality(_player_data)
 
@@ -498,6 +533,8 @@ local function newEntry(_player_data, _checksum, num_peer_checks, in_guild, sour
 
 	local modified_checksum = DeathNotificationLib.Fletcher16(_player_data)
 
+	if Deathlog_IS_FOREVER and not makeRoomForEntry(realmName, modified_checksum, _player_data) then return end
+
 	deathlog_data[realmName][modified_checksum] = _player_data
 
 	-- Maintain name index
@@ -531,77 +568,116 @@ end
 --- them, keeping the highest-quality entry.  Runs synchronously on login.
 --- Marks completion in deathlog_settings so it only runs once.
 local DEDUP_CLEANUP_VERSION = 1  -- bump to re-run cleanup after future fixes
+-- Forever: once per region key, and again after the migration moves rows into it.
+local FOREVER_DEDUP_VERSION = 1
 
-local function deathlog_runDedupCleanup()
-	if deathlog_settings["dedup_cleanup_version"] and deathlog_settings["dedup_cleanup_version"] >= DEDUP_CLEANUP_VERSION then
-		return
-	end
-
+---@return number removed
+local function dedupRealm(realmName, entries)
 	local total_removed = 0
-
-	for realmName, entries in pairs(deathlog_data) do
-		if type(entries) == "table" then
-			-- Build a local name → [{checksum, date, level, quality}] index
-			local by_name = {}
-			for cs, entry in pairs(entries) do
-				local n = entry["name"]
-				if n then
-					if not by_name[n] then by_name[n] = {} end
-					by_name[n][#by_name[n] + 1] = {
-						cs = cs,
-						date = entry["date"] or 0,
-						level = entry["level"] or 0,
-						quality = DeathNotificationLib.EntryQuality(entry),
-					}
-				end
-			end
-
-			-- For each name, detect and merge near-duplicates
-			for player_name, entry_list in pairs(by_name) do
-				if #entry_list > 1 then
-					-- Sort by date ascending
-					table.sort(entry_list, function(a, b) return a.date < b.date end)
-
-					local i = 1
-					while i <= #entry_list do
-						local j = i + 1
-						while j <= #entry_list do
-							local effective_level = math.max(entry_list[i].level, entry_list[j].level)
-							local time_diff = math.abs(entry_list[j].date - entry_list[i].date)
-							if time_diff <= DeathNotificationLib.GetDedupWindow(effective_level) then
-								-- Near-duplicate: keep the higher quality entry, merge data
-								local keep = entry_list[i]
-								local remove = entry_list[j]
-								if remove.quality > keep.quality then
-									keep, remove = remove, keep
-									entry_list[i] = keep
-								end
-
-								local keep_entry = entries[keep.cs]
-								local remove_entry = entries[remove.cs]
-								if keep_entry and remove_entry then
-									local merged = DeathNotificationLib.MergeEntries(keep_entry, remove_entry)
-									entries[keep.cs] = merged
-									entries[remove.cs] = nil
-									-- Update name_index if it exists
-									if name_index[realmName] and name_index[realmName][player_name] then
-										name_index[realmName][player_name][remove.cs] = nil
-									end
-									total_removed = total_removed + 1
-								end
-								table.remove(entry_list, j)
-							else
-								j = j + 1
-							end
-						end
-						i = i + 1
-					end
-				end
-			end
+	-- Build a local name → [{checksum, date, level, quality}] index
+	local by_name = {}
+	for cs, entry in pairs(entries) do
+		local n = entry["name"]
+		if n then
+			if not by_name[n] then by_name[n] = {} end
+			local extra = Deathlog_IS_FOREVER and entry["extra_data"]
+			by_name[n][#by_name[n] + 1] = {
+				cs = cs,
+				date = tonumber(entry["date"]) or 0,
+				level = tonumber(entry["level"]) or 0,
+				quality = DeathNotificationLib.EntryQuality(entry),
+				sn = type(extra) == "table" and extra["sn"] or nil,
+				class = Deathlog_IS_FOREVER and entry["class_id"] or nil,
+				race = Deathlog_IS_FOREVER and entry["race_id"] or nil,
+			}
 		end
 	end
 
-	deathlog_settings["dedup_cleanup_version"] = DEDUP_CLEANUP_VERSION
+	-- For each name, detect and merge near-duplicates
+	for player_name, entry_list in pairs(by_name) do
+		if #entry_list > 1 then
+			-- Sort by date ascending
+			table.sort(entry_list, function(a, b) return a.date < b.date end)
+
+			local i = 1
+			while i <= #entry_list do
+				local j = i + 1
+				while j <= #entry_list do
+					local effective_level = math.max(entry_list[i].level, entry_list[j].level)
+					local time_diff = math.abs(entry_list[j].date - entry_list[i].date)
+					local a, b = entry_list[i], entry_list[j]
+					-- A different Forever surname, class or race is another player.
+					local same = (a.sn == nil or b.sn == nil or a.sn == b.sn)
+						and (a.class == nil or b.class == nil or a.class == b.class)
+						and (a.race == nil or b.race == nil or a.race == b.race)
+					if time_diff <= DeathNotificationLib.GetDedupWindow(effective_level) and same then
+						-- Near-duplicate: keep the higher quality entry, merge data
+						local keep = entry_list[i]
+						local remove = entry_list[j]
+						if remove.quality > keep.quality then
+							keep, remove = remove, keep
+							entry_list[i] = keep
+						end
+
+						local keep_entry = entries[keep.cs]
+						local remove_entry = entries[remove.cs]
+						if keep_entry and remove_entry then
+							local merged = DeathNotificationLib.MergeEntries(keep_entry, remove_entry)
+							entries[keep.cs] = merged
+							if Deathlog_IS_FOREVER then
+								local map = deathlog_data_map[realmName]
+								if type(map) == "table" and map[player_name] == remove.cs then map[player_name] = keep.cs end
+								local origins = deathlog_entry_origin[realmName]
+								if type(origins) == "table" then
+									origins[keep.cs] = origins[keep.cs] or origins[remove.cs]
+									origins[remove.cs] = nil
+								end
+							end
+							entries[remove.cs] = nil
+							keep.sn, keep.class, keep.race = keep.sn or remove.sn, keep.class or remove.class, keep.race or remove.race
+							-- Update name_index if it exists
+							if name_index[realmName] and name_index[realmName][player_name] then
+								name_index[realmName][player_name][remove.cs] = nil
+							end
+							total_removed = total_removed + 1
+						end
+						table.remove(entry_list, j)
+					else
+						j = j + 1
+					end
+				end
+				i = i + 1
+			end
+		end
+	end
+	return total_removed
+end
+
+local function deathlog_runDedupCleanup()
+	local total_removed = 0
+
+	if not (deathlog_settings["dedup_cleanup_version"] and deathlog_settings["dedup_cleanup_version"] >= DEDUP_CLEANUP_VERSION) then
+		for realmName, entries in pairs(deathlog_data) do
+			if type(entries) == "table" then
+				total_removed = total_removed + dedupRealm(realmName, entries)
+			end
+		end
+		deathlog_settings["dedup_cleanup_version"] = DEDUP_CLEANUP_VERSION
+	end
+
+	if Deathlog_IS_FOREVER and not settings_load_failed then
+		local done = deathlog_settings["forever_dedup_version"]
+		if type(done) ~= "table" then
+			done = {}
+			deathlog_settings["forever_dedup_version"] = done
+		end
+		for realmName, entries in pairs(deathlog_data) do
+			if type(entries) == "table" and Deathlog_foreverKeyOf(realmName) == realmName and (tonumber(done[realmName]) or 0) < FOREVER_DEDUP_VERSION then
+				total_removed = total_removed + dedupRealm(realmName, entries)
+				done[realmName] = FOREVER_DEDUP_VERSION
+			end
+		end
+	end
 
 	if total_removed > 0 then
 		print("|cFF00FF00[Deathlog]|r Database cleanup: removed " .. total_removed .. " duplicate entries.")
@@ -614,6 +690,15 @@ local function deathlog_watchlistIconProvider(playerName)
 	if type(playerName) ~= "string" then return nil end
 	if type(deathlog_watchlist_entries) ~= "table" then return nil end
 	local watch = deathlog_watchlist_entries[playerName]
+	if Deathlog_IS_FOREVER and watch == nil then
+		local probe = { name = Deathlog_broadcastName(playerName), extra_data = { sn = playerName:match("^%S+ (.+)$") } }
+		for watched, entry in pairs(deathlog_watchlist_entries) do
+			if Deathlog_entryMatchesName(probe, watched) then
+				watch = entry
+				break
+			end
+		end
+	end
 	if type(watch) ~= "table" then return nil end
 	if type(watch.Icon) ~= "string" or watch.Icon == "" then return nil end
 	return watch.Icon
@@ -622,6 +707,37 @@ end
 local has_shipped_stats = (DeathlogDataCopy.PRECOMPUTED_GENERAL_STATS and DeathlogDataCopy.PRECOMPUTED_LOG_NORMAL_PARAMS and DeathlogDataCopy.PRECOMPUTED_LOG_NORMAL_PARAMS_BY_CAUSE and DeathlogDataCopy.PRECOMPUTED_KAPLAN_MEIER and DeathlogDataCopy.PRECOMPUTED_KAPLAN_MEIER_BY_CAUSE and DeathlogDataCopy.PRECOMPUTED_MOST_DEADLY_BY_ZONE and DeathlogDataCopy.PRECOMPUTED_CAUSE_STATS and DeathlogDataCopy.PRECOMPUTED_PURGES) and true or false
 local has_shipped_heatmaps = (DeathNotificationLibDataCopy.HEATMAP_INTENSITY and DeathNotificationLibDataCopy.HEATMAP_INTENSITY_BY_CAUSE and DeathNotificationLibDataCopy.HEATMAP_CREATURE_SUBSET) and true or false
 local precompute_running = false
+
+---@param keep (fun(entry: table): boolean)|nil
+local function foreverEntries(entries, keep)
+	local kept = {}
+	for key, entry in pairs(entries or {}) do
+		if not Deathlog_predatesForever(entry["date"]) and (not keep or keep(entry)) then
+			kept[key] = entry
+		end
+	end
+	return kept
+end
+
+-- On Forever only this region's deaths since launch count, so a copied Classic settings folder adds none; logs not yet moved to the region key still count.
+local function localStatsData()
+	local data = Deathlog_withPersonalLog(deathlog_data)
+	if not Deathlog_IS_FOREVER then
+		return data
+	end
+	local key = Deathlog_realmKey()
+	local blank = Deathlog_foreverBlankTarget(key)
+	local out = {}
+	for realm, entries in pairs(data) do
+		if realm ~= Deathlog_PERSONAL_LOG_KEY and Deathlog_foreverKeyOf(realm, blank) == key then
+			out[realm] = foreverEntries(entries)
+		end
+	end
+	out[Deathlog_PERSONAL_LOG_KEY] = foreverEntries(data[Deathlog_PERSONAL_LOG_KEY], function(entry)
+		return Deathlog_foreverKeyOf(Deathlog_personalEntryRealm(entry), blank) == key
+	end)
+	return out
+end
 
 -- The date sum still changes when a cap makes a new death replace the oldest one.
 local function localCacheKey(version, data)
@@ -632,7 +748,11 @@ local function localCacheKey(version, data)
 			date_sum = date_sum + (tonumber(entry["date"]) or 0)
 		end
 	end
-	return string.format("%s:%s:%d:%.0f", tostring(version), tostring(WOW_PROJECT_ID), n, date_sum)
+	local key = string.format("%s:%s:%d:%.0f", tostring(version), tostring(WOW_PROJECT_ID), n, date_sum)
+	if Deathlog_IS_FOREVER then
+		return key .. ":" .. tostring((select(2, GetBuildInfo())))
+	end
+	return key
 end
 
 -- One heavy step per frame; results are cached in deathlog_precomputed under localCacheKey().
@@ -642,7 +762,7 @@ local function buildPrecomputeSteps(force)
 	local precompute_steps = {}
 	local local_data, cache_key
 	if not (has_shipped_stats and has_shipped_heatmaps) then
-		local_data = Deathlog_withPersonalLog(deathlog_data)
+		local_data = localStatsData()
 		cache_key = localCacheKey(version, local_data)
 	end
 
@@ -770,6 +890,10 @@ local function handleEvent(self, event, ...)
 				deathlog_settings["legacy_messages"] = nil
 				deathlog_settings["legacy_messages_reset"] = 1
 			end
+			-- "" waits for PLAYER_ENTERING_WORLD, where the Hardcore suffix of the key is settled.
+			if Deathlog_IS_FOREVER and not settings_load_failed then
+				Deathlog_migrateForeverRealms()
+			end
 			Deathlog_collapsePersonalDuplicates()
 			Deathlog_archiveOnLoad(settings_load_failed)
 			self:UnregisterEvent("ADDON_LOADED")
@@ -780,6 +904,14 @@ local function handleEvent(self, event, ...)
 		if deathlog_initialized then return end
 		deathlog_initialized = true
 		initMinimapButton()
+		Deathlog_settleRealmKey()
+		if Deathlog_IS_FOREVER and not settings_load_failed then
+			local moved, rewritten = Deathlog_migrateForeverRealms(Deathlog_realmKey())
+			if moved > 0 or rewritten then
+				Deathlog_collapsePersonalDuplicates()
+				Deathlog_archiveOnLoad(false)
+			end
+		end
 		Deathlog_archiveBuildKeys()
 		if settings_load_failed then
 			C_Timer.After(5, showLoadFailedWarning)
@@ -808,7 +940,7 @@ local function handleEvent(self, event, ...)
 
 		-- Ensure realm sub-tables exist so AttachAddon receives valid table
 		-- references (not nil) that remain in sync with newEntry.
-		local realmName = GetRealmName()
+		local realmName = Deathlog_realmKey()
 		if deathlog_data[realmName] == nil then
 			deathlog_data[realmName] = {}
 		end
@@ -1015,6 +1147,7 @@ local options = {
 			desc = "Import deathlog from hardcore. This will append entries.",
 			width = 1.3,
 			order = 1,
+			hidden = Deathlog_IS_FOREVER,
 			func = function()
 				Deathlog_LoadFromHardcore()
 			end,

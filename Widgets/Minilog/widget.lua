@@ -128,6 +128,11 @@ if Deathlog_EXPANSION_LEVEL >= 1 then
 	rmap["BloodElf"] = { 0, 0.25, 0.5, 0.75 }
 	rmap["Draenei"] = { 0.25, 0.5, 0.5, 0.75 }
 end
+-- Races missing from UI-CHARACTERCREATE-RACES use the client's race icon atlas.
+local ratlas = {}
+if Deathlog_IS_FOREVER then
+	ratlas["Skyborne"] = "raceicon-skyborne-"
+end
 
 local presets = {
 	["Hardcore (legacy)"] = "Hardcore (legacy)",
@@ -423,6 +428,10 @@ local subtitle_metadata = {
 				return ""
 			end
 			local race_info = C_CreatureInfo.GetRaceInfo(_entry.player_data["race_id"])
+			local atlas = race_info and race_info.clientFileString and ratlas[race_info.clientFileString]
+			if atlas and _entry.player_data["level"] then
+				return "|A:" .. atlas .. (_entry.player_data["level"] % 2 == 1 and "female" or "male") .. ":16:16|a"
+			end
 			if race_info and race_info.clientFileString and rmap[race_info.clientFileString] and _entry.player_data["level"] then
 				local msg = "|TInterface\\Glues\\CHARACTERCREATE\\UI-CHARACTERCREATE-RACES.PNG:16:16:0:0:64:64:"
 					.. rmap[race_info.clientFileString][1] * 64
@@ -710,7 +719,7 @@ local function setupRowEntries()
                 else
                     death_tomb_frame.coordinates = nil
                 end
-				death_tomb_frame.clicked_name = _entry["player_data"]["name"]
+				death_tomb_frame.clicked_name = Deathlog_IS_FOREVER and Deathlog_getEntryChatName(_entry["player_data"]) or _entry["player_data"]["name"]
 				death_tomb_frame.clicked_player_data = _entry["player_data"]
 
 				if not _G["WPDemoContextMenu"] then
@@ -773,7 +782,8 @@ function Deathlog_minilog_refreshEntries()
 
 	clearVisibleEntries()
 	-- Only the first #row_entry entries are ever read below, so ask for just those.
-	local ordered_entries = DeathlogOrderByFast(deathlog_data or {}, #row_entry)
+	local data = deathlog_data or {}
+	local ordered_entries = DeathlogOrderByFast(Deathlog_IS_FOREVER and Deathlog_foreverLogView(data) or data, #row_entry)
 	local max_visible_entries = math.min(#ordered_entries, #row_entry)
 	for i = max_visible_entries, 1, -1 do
 		Deathlog_widget_minilog_createEntry(ordered_entries[i])
@@ -781,7 +791,13 @@ function Deathlog_minilog_refreshEntries()
 end
 
 function Deathlog_widget_minilog_createEntry(player_data)
-	if entry_cache[player_data["name"]] then
+	-- Forever players sharing a first name are told apart by surname.
+	local cache_key = Deathlog_IS_FOREVER and Deathlog_entryFullName(player_data) or player_data["name"]
+	if entry_cache[cache_key] then
+		return
+	end
+	-- The settings test entry has no date.
+	if player_data["date"] and Deathlog_predatesForever(player_data["date"]) then
 		return
 	end
 	local ws = deathlog_settings[widget_name]
@@ -808,7 +824,7 @@ function Deathlog_widget_minilog_createEntry(player_data)
 		return
 	end
 
-	entry_cache[player_data["name"]] = 1
+	entry_cache[cache_key] = 1
 
 	for i = 1, 19 do
 		if row_entry[i + 1].player_data ~= nil then

@@ -30,301 +30,267 @@ local NO_CHANGELOG_VERSIONS = {
 local CHANGELOG_CONTENT = [[
 |cFFFFD700Deathlog Changelog|r
 
+|cFF00FF00[0.7.1] - 2026-11-25|r
+
+|cFFFFFFFFWoW Forever|r
+- Deaths are now kept per region ('WoW Forever US'); saved deaths move over automatically
+- Players who share a first name are mixed up far less often
+- Forever's explored areas on the zone map, and pages for Zephras Isle and Darkspear Islands
+- Naxxramas is back in Instance Statistics
+- Skyborne players show their race in the filter and mini log
+- Deaths from a copied Classic settings folder no longer show up
+
+|cFFFFFFFFFixes|r
+- Battleground statistics open from links on the map
+- UltraHardcore deaths land in the right dungeon or battleground
+- HardcoreTBC battleground deaths count under the battleground, with the killer
+- Deaths at sea no longer count as Deadmines deaths
+
 |cFF00FF00[0.7.0] - 2026-11-18|r
 
 |cFFFFFFFFNew Features|r
-- Your death log no longer grows too big for the game to load. Deathlog keeps the newest 50,000 deaths loaded (you can lower this to 10,000 under Options > Deathlog > Database Sync) and archives older ones, which the Search tab still finds. Chat tells you when more get archived or the oldest are removed
-- Personal death log: your own deaths are kept in a log that every character on your account shares, Hardcore deaths included. It is never broadcast or synced. In the Search tab, set Server to 'Personal' to see it; turn it off or clear it in Options > Deathlog
-- WoW Forever: statistics and heatmaps are built from your own log, including the personal deaths of all your characters, and refresh at login when deaths were added. Type /dl recompute to refresh them right away
-
-|cFFFFFFFFImprovements|r
-- Options > Deathlog > Database Sync shows how full your database is and how many deaths are in your log, the archive and your personal log. The share popup counts archived deaths too, and chat warns you once the database is 90% full
-- Database sync no longer asks other players for days already in your archive, so it fills recent gaps instead of resending old deaths, and waits longer after a sync that brings nothing new
-- On normal realms the info button now explains where your own deaths go and what the statistics and heatmaps show, instead of saying 'Not supported'
+- Your log no longer grows too big to load; older deaths are archived but searchable
+- New personal death log for all your characters; set Server to 'Personal' in Search
+- WoW Forever: statistics and heatmaps are built from your own log
 
 |cFFFFFFFFFixes|r
-- WoW Forever: hovering a creature or corpse inside dungeons no longer throws errors. The game hides that information there, so the creature ranking and corpse lines are left out. Your own deaths are still logged
-- WoW Forever: no more 'tried to call the protected function' errors from Deathlog in battlegrounds, dungeons and raids. Forever blocks addon chat messages there, so Deathlog no longer tries to send while you are inside
-- WoW Forever: when the game reports your death twice, it is now recorded and announced once
-- Settings survive a failed load: after you log out once with this version, each character keeps a copy of your Deathlog settings. If the database fails to load, they are restored and a warning explains how to save Deathlog.lua.bak before it is overwritten
-- Burning Crusade Anniversary characters that never had Soul of Iron are no longer told after a death that they lost Hardcore status, and on Classic Era Hardcore realms the info button no longer mentions Tarnished Soul
-- /dl versions shows which copy is really in use: a newer copy that came with another addon is no longer called 'embedded in Deathlog', and an older copy from another addon that cannot be replaced is marked as such
-- Deaths reported by other players, such as party members, now show a death alert. If you never opened the Deathlog options, they are no longer ignored and Deathlog's chat channels are hidden again. On Classic Era Hardcore realms Deathlog then also changes the game's Hardcore death alert and chat settings, as 'Auto-configure Blizzard death tracking' describes; turn that option off if you do not want this
-- 'Accept legacy protocol messages' is switched off once for everyone, because opening the options used to turn it on without asking. Turn it back on in Options > Deathlog if you want it, and it stays on
-- With database sync turned off, Deathlog no longer saves deaths from other players' sync when an addon such as Deathmap Live Tracker is installed, and no longer imports HardcoreTBC's saved death history. Live deaths still arrive
-- The playtime option is now called 'Keep playtime on logged deaths'. It only decides whether /played time is kept on deaths saved in your log, and it never hid your own /played time from your death message
+- WoW Forever: no more errors in dungeons, battlegrounds and raids, and no double deaths
+- Your settings are restored if the database fails to load
+- Death alerts show party deaths again; on Hardcore realms Blizzard's alert settings are adjusted
+- 'Accept legacy protocol messages' was turned off once; turn it back on in Options if you want it
 
 |cFF00FF00[0.6.0] - 2026-11-10|r
 
 |cFFFFFFFFNew Features|r
-- World of Warcraft: Forever support. Deathlog loads on Forever with Classic zones and instances plus Forever's own zones, instances and creatures. Statistics and heatmaps use Forever-only data once enough Forever deaths are collected, and your own log until then
-- The CurseForge download now carries DeathNotificationLib, ProfanityLib and the data packages inside the Deathlog folder. When a newer copy is also installed separately, the newest one is used; update separate copies from before this release. The separate DeathlogData and DeathNotificationLibData keep receiving nightly data updates. /dl versions shows which copy is in use
+- WoW Forever support, with Forever's own zones, instances and creatures
+- The CurseForge download now includes everything Deathlog needs; update separately installed copies
 
 |cFFFFFFFFFixes|r
-- Damage without a source, such as the Cloud of Disease in Scholomance, no longer throws an error on every tick (thanks leozitor)
-- The trade window enchantment recorder no longer replaces the Trade button's click handler and reads the right enchantment value
-- New entries arriving while the statistics are still being computed no longer error on the purge list
+- No more repeated errors from damage like the Cloud of Disease in Scholomance (thanks leozitor)
+- The Trade button works normally again, plus smaller fixes
 
 |cFF00FF00[0.5.25] - 2026-09-11|r
 
 |cFFFFFFFFFixes|r
-- Statistics tables no longer overlap. Death counts, percentages and class names in the statistics tabs ran into each other now that the database holds over 1.5 million deaths. Columns have proper spacing, and large counts show as 889k or 1.55M (GitHub issue #7, thanks Lairo)
-- The download buttons no longer stick out of the 'update available' window, and CurseForge is preselected
+- Statistics tables no longer overlap; large counts show as 889k or 1.55M (thanks Lairo)
+- The download buttons now fit inside the 'update available' window
 
 |cFF00FF00[0.5.24] - 2026-09-09|r
 
 |cFFFFFFFFNew Features|r
-- Deathmap links: right-click a death in the log or mini log and pick 'Copy Deathmap URL' to get a link to that character on wowdeathmap.com, opened directly at that death. Very recent deaths can take a few minutes to show up on the site
-- 'View on wowdeathmap.com' badge at the bottom of the main window. Click it to copy a link to the live map of all deaths
+- Right-click a death and pick 'Copy Deathmap URL' to see it on wowdeathmap.com
+- A badge in the main window copies a link to the live death map
 
 |cFFFFFFFFImprovements|r
-- The little windows that hand you a link to copy (Discord invite, Deathmap links) now have a solid dark background, fit their content, and can be closed with a Close button as well as Esc
-- The numbers behind the 'share your deaths' reminder are now tracked per realm. They used to add up every realm on your account, which skewed them after playing elsewhere
+- Copy-link windows are easier to read and have a Close button
 
 |cFFFFFFFFFixes|r
-- The Refresh button on the search tab no longer sits outside the window on wide layouts
-- Death alerts on brand-new accounts: a new account can be silenced in custom chat channels for its first few days. The addon now recognises the mute, waits, and picks up on its own once it is lifted instead of retrying every few seconds
-- When the main death-alert channel could not be joined, every retry used to add another letter to the backup channel's name, so players could end up in different backup channels. There is now a single fixed backup channel
-- The offensive-name filter now ignores accents, so names that hid a slur behind accented letters no longer slip past. A few more spellings were added after checking them against real character names
+- Death alerts on brand-new accounts start working once the game lifts its chat mute
+- Everyone now shares one backup death alert channel
+- The name filter now catches offensive names hidden behind accented letters
 
 |cFF00FF00[0.5.23] - 2026-08-12|r
 
 |cFFFFFFFFNew Features|r
-- Local moderation: right-click a death to Report player, Hide name (local-only, reversible with /dl unhide <name>, list with /dl hidden), or — for deaths a peer sent you — Report/Ignore the sender. An offensive name/guild shows in red as 'Report name'
-- Report message: for a death you received live this session, file a chat report that attaches the actual broadcast text (where a griefer hides an offensive fake name) and attributes it to the real sender. Only offered while the message is still fresh in the session it arrived in
-- 'Reported by' attribution: deaths that reached you via a peer now show who reported them in the minilog (optional column), the tooltip, and a new <reported_by> death-alert tag. In the main search window a reported death is marked with a trailing * after the name (hover for the reporter)
+- Right-click a death to report or hide a player, or ignore whoever sent it
+- 'Report message' reports a fresh death with its original text and real sender
+- Deaths sent by other players now show who reported them
 
 |cFFFFFFFFImprovements|r
-- Anti-abuse hardening: the recent fake-death floods (junk names, impossible sources) are now rejected on every path they can arrive through — live broadcasts and background sync both validate entries before storing them, each sender is volume-capped so one player can't flood your log, and a one-time background cleanup removes fabricated entries already in your log
-- 'Killed by: Reported' is gone: peer-reported deaths now predict the killer from the death location like any other unresolved source (shown with the usual trailing *), falling back to 'Unknown' when no prediction is possible
+- Fake death floods are blocked, and fake deaths already in your log are removed
+- 'Killed by: Reported' is gone; the killer is now guessed from where they died
 
 |cFF00FF00[0.5.22] - 2026-07-25|r
 
 |cFFFFFFFFFixes|r
-- Fixed the extra mini log fonts (BreatheFire, Black Chancery, Immortal, etc.) not loading. They ship with DeathNotificationLib, which is installed as its own addon rather than inside Deathlog, so the old hardcoded path pointed at a folder that doesn't exist. The path is now resolved from DeathNotificationLib itself (thanks @karaktaka)
-- Fixed an error when changing a mini log column to Playtime, Guild, Last Words, Class Logo or Race Logo, or when switching to the Concise or Yazpad preset. The mini log went blank, and after a reload it reset to the middle of the screen, couldn't be dragged, and vanished from the addon settings (thanks flames57)
-- Fixed mini log columns rendering blank when the same column is picked in more than one slot, or when two columns share a heading (such as Name together with Coloured Name). Every column slot is now independent
+- The extra mini log fonts now load (thanks karaktaka)
+- Changing mini log columns or presets no longer breaks the mini log (thanks flames57)
+- Mini log columns no longer go blank when used twice
 
 |cFF00FF00[0.5.21] - 2026-07-24|r
 
 |cFFFFFFFFFixes|r
-- Fixed the remaining 'Invalid font asset' error when changing minilog columns or presets; missing font files no longer break the options UI
-- Fixed the per-feature settings panels (minilog, tooltips, heatmaps, Death Alert, etc.) going missing from the options for some players; each panel now loads independently so one failing panel can't hide the rest
-- Fixed a Lua error when a death alert tried to play a sound that no longer exists (e.g. removed, or from a media addon that isn't installed); it now falls back to the default sound
+- Changing mini log columns or presets no longer shows a font error
+- Settings panels no longer go missing from the options
+- A missing death alert sound now falls back to the default
 
 |cFFFFFFFFImprovements|r
-- Added a /dl versions command that prints the versions of Deathlog and its bundled components (DeathNotificationLib, data packages) and notes when a newer version has been seen from other players
-- Updated the embedded UI and media libraries to their latest Classic Era 1.15.9 and TBC 2.5.6-compatible releases
-- The update-available, changelog, and contribution popups now only appear while resting (inn/city) instead of anywhere out of combat, so they no longer interrupt you in the open world (important for Hardcore). Custom LibSharedMedia death-alert sounds now show up in the picker without a /reload
+- New /dl versions command shows the versions of Deathlog and its parts
+- Update, changelog and contribution popups now only appear while resting
 
 |cFF00FF00[0.5.20] - 2026-07-23|r
 
 |cFFFFFFFFFixes|r
-- Fixed a 'sort ran for too long' error when opening /deathlog on very large logs that left the log blank. The log is now ordered without a slow per-comparison callback, so the full result set displays with no cap
-- Made the remaining heavy first-login calculations fully incremental so they can no longer trip the script limit on very large logs
+- Opening /deathlog on very large logs no longer errors or shows an empty log
+- First login with a very large log no longer causes errors
 
 |cFF00FF00[0.5.19] - 2026-07-23|r
 
 |cFFFFFFFFFixes|r
-- Fixed more 'script ran too long' errors under Classic Era 1.15.9's tighter script limits. The heavy first-login statistics and heatmap calculations are now spread across several frames, so a first login with a large death log no longer errors out (previously this needed a /reload to recover)
-- Fixed a 'script ran too long' error when opening /deathlog on very large logs; the log now sorts with a single fast pass that stays within the script limit even for the entire database
+- First login with a large log no longer errors on Classic Era 1.15.9
+- Opening /deathlog on very large logs no longer errors
 
 |cFF00FF00[0.5.17] - 2026-07-22|r
 
 |cFFFFFFFFBug Fixes|r
-- Fixed the death alert 'Guild Only' filter sometimes not showing alerts for guild members' deaths (thanks to Fate)
-- Fixed shift-clicking a player name in chat opening the Who window instead of printing the result to chat (thanks to Makpptfox)
+- The death alert 'Guild Only' filter no longer misses guild deaths (thanks Fate)
+- Shift-clicking a name in chat shows the result in chat, not the Who window (thanks Makpptfox)
 
 |cFFFFFFFFImprovements|r
-- The 'Inspect user' option in the mini log right-click menu now shows the result in the chat window instead of opening the Who panel (thanks to Makpptfox)
-- Watch List notes can now be up to 100 characters instead of 20, so a full reminder fits (thanks to Fate)
+- 'Inspect user' in the mini log menu now shows its result in chat (thanks Makpptfox)
+- Watch List notes can be up to 100 characters (thanks Fate)
 
 |cFF00FF00[0.5.16] - 2026-07-16|r
 
 |cFFFFFFFFBug Fixes|r
-- Fixed Watch List clicks landing on the wrong column when the Deathlog window is scaled down; the Icon and Remove (X) buttons were unclickable (thanks to Fate)
-- Fixed a death being broadcast a second time when logging back into an already-dead hardcore character, which created duplicate death entries
-- Fixed an error popup that could appear when opening the Watch List tab
-- Fixed an error when opening the Deathlog settings on TBC Anniversary (minimap button, /deathlog options, or the mini log menu)
-- Fixed font error popups that could appear when opening the settings panel on TBC Anniversary
+- Watch List buttons are clickable when the Deathlog window is scaled down (thanks Fate)
+- Logging back into a dead Hardcore character no longer creates a duplicate death
+- Fixed error popups in the Watch List and the TBC Anniversary settings
 
 |cFFFFFFFFImprovements|r
-- Updated for the latest WoW Classic TBC Anniversary patch (2.5.6)
+- Updated for TBC Anniversary patch 2.5.6
 
 |cFF00FF00[0.5.15] - 2026-06-27|r
 
 |cFFFFFFFFNew Features|r
-- Added a settings toggle to display dates in DD/MM/YY (European) format instead of MM/DD/YY (thanks to Makpptfox)
-- Added a 'Sound Channel' option for death alerts; set it to 'Master' (new default) to keep alerts audible regardless of your Sound Effects volume
+- Option to show dates as DD/MM/YY (thanks Makpptfox)
+- New 'Sound Channel' option keeps death alerts audible at low effects volume
 
 |cFFFFFFFFBug Fixes|r
-- The world map can now be closed with the ESC key (thanks to Makpptfox)
-- Fixed the 'Show death location' button in the mini log right-click menu (thanks to Makpptfox)
-- Death entries with missing location data no longer reuse the previous entry's map pin (thanks to Makpptfox)
-- Fixed the Watch List remove (X) button being hard to click; the whole X column is now clickable, and blank rows are no longer created
+- Esc closes the world map, and 'Show death location' now works (thanks Makpptfox)
+- Deaths without a location no longer reuse the previous death's map pin (thanks Makpptfox)
+- The Watch List remove (X) button is easier to click
 
 |cFF00FF00[0.5.14] - 2026-06-15|r
 
 |cFFFFFFFFNew Features|r
-- The mini log now hides its resize handle while 'Lock position' is enabled, and the Heatmap Indicator gained a 'Lock Heatmap' option that prevents dragging (thanks to Makpptfox)
+- 'Lock position' hides the mini log resize handle; the heatmap indicator can lock too (thanks Makpptfox)
 
 |cFFFFFFFFBug Fixes|r
-- Player names with special characters (umlauts, accents, tildes, etc.) now display correctly in the mini log and the main death log
-- Russian (Cyrillic) player names now render correctly in the mini log and main death log
+- Names with accents, umlauts or Cyrillic letters now display correctly
 
 |cFFFFFFFFImprovements|r
-- The mini log font no longer appears oversized after the font fix; its size now matches the previous appearance
+- The mini log font is back to its normal size
 
 |cFF00FF00[0.5.13] - 2026-05-25|r
 
 |cFFFFFFFFNew Features|r
-- Added mini log visibility controls: use /dl minilog to toggle it, /dl minilog show or /dl minilog hide for explicit control, or Ctrl-click the minimap button
+- Show or hide the mini log with /dl minilog or Ctrl-click on the minimap button
 
 |cFFFFFFFFImprovements|r
-- Zone Statistics now opens to the last viewed zone when available, otherwise the player's current zone, before falling back to the root map
+- Zone Statistics opens on the last viewed zone, or your current zone
 
 |cFF00FF00[0.5.12] - 2026-05-11|r
 
 |cFFFFFFFFBug Fixes|r
-- Fixed an issue preventing death alerts from showing for certain entries
+- Fixed death alerts not showing for some deaths
 
 |cFF00FF00[0.5.9] - 2026-04-21|r
 
 |cFFFFFFFFBug Fixes|r
-- Fixed class and race icons not showing in the Minilog for players on non-English game clients
+- Class and race icons in the mini log now show on non-English clients
 
 |cFF00FF00[0.5.7] - 2026-04-16|r
 
 |cFFFFFFFFBug Fixes|r
-- Fixed crash when viewing class statistics with no data for the "all" aggregate
-- Fixed crash in creature ranking tooltip when precomputed general stats are unavailable
-- Fixed crash in deadliest creature filter when a creature entry is missing from the stats table
+- Fixed a crash in class statistics when there is no data
+- Fixed crashes in creature rankings when data is missing
 
 |cFF00FF00[0.5.6] - 2026-04-15|r
 
 |cFFFFFFFFNew Features|r
-- Shared Cause filter in the Deathlog menu — one dropdown now drives the Search Log plus Zone, Instance, Creature, and Class statistics
-- Minilog, global heatmap indicator, and world map heatmap overlay each now have their own Source Filter setting
-- Class survival graphs and tables now support specific causes instead of only all-cause precomputes
+- New Cause filter for the Search log and the Zone, Instance, Creature and Class statistics
+- Mini log and heatmaps each have their own source filter
 
 |cFFFFFFFFImprovements|r
-- Cause-specific counts, descriptions, and empty states now update across the stats tabs, including the footer preprocessed total
-- Creature rankings, class comparison tables, and instance summaries now use the selected-cause dataset instead of mixing in all-cause totals
-- Exported by-cause log-normal and Kaplan-Meier tables now follow the same shipped-data and fallback-cache flow as the rest of Deathlog's precomputed data
+- Statistics and class survival graphs now follow the selected cause
 
 |cFFFFFFFFBug Fixes|r
-- Fixed instance, creature, and class statistics not redrawing correctly when the Cause filter changed
-- Fixed sparse cause buckets breaking normalized creature rankings by falling back cleanly when a survival model is unavailable
-- Fixed menu layout regressions introduced while consolidating the Cause control beside Watch List
-- Fixed Creature Statistics showing "0.00%" when no data exists for the selected creature
-- Fixed PvP deaths showing as "Unknown" in creature statistics — now displays race, class, and level
-- Fixed Death Statistics displaying "100% occur in Azeroth" at the top-level map
-
-|cFFFFFFFFDeathNotificationLib V14|r
-- Added shared source-kind classification APIs and by-cause heatmap data plumbing used by Deathlog's new Cause filter, cause-aware stats, and per-cause heatmaps
+- Statistics redraw correctly when the Cause filter changes
+- PvP deaths in creature statistics show race, class and level, not 'Unknown'
+- Smaller fixes
 
 |cFF00FF00[0.5.5] - 2026-03-22|r
 
 |cFFFFFFFFBug Fixes|r
-- Fixed HC state being inherited when a new character shares a name with a previous one — state now resets correctly on GUID mismatch
-- Fixed crash in creature ranking when saved data contains creatures with an average level above the expansion cap
-- Filter out synced death entries with level exceeding the max player level
+- A new character with an old character's name no longer inherits its Hardcore status
+- Fixed a crash in creature rankings caused by very high-level creatures
+- Synced deaths above the max player level are ignored
 
 |cFF00FF00[0.5.4] - 2026-03-16|r
 
 |cFFFFFFFFNew Features|r
-- Death Filter in the search log — filter by All Deaths, Guild Only, or Guild Confederation (requires GreenWall); saved between sessions
-- GreenWall confederation option now shows as soon as GreenWall is installed
+- Search log filter: all deaths, guild only, or guild confederation (needs GreenWall)
 
 |cFFFFFFFFBug Fixes|r
-- Fixed search log clipping on the right side
-- Fixed filters not applying when first opening the search log
-- Fixed guild filters matching nothing for the first 10 seconds after login
-- Deferred library initialization until at least one addon has registered, fixing early channel joins
+- The search log no longer clips on the right side
+- Search log filters work right away, even just after login
 
 |cFF00FF00[0.5.3] - 2026-03-15|r
 
 |cFFFFFFFFNew Features|r
-- Refresh button in the search log — reload the death list while keeping active filters
-- Auto-refresh the death list every 10 seconds (disabled by default, enable in options); preserves active filters
+- Refresh button in the search log that keeps your filters
+- Optional auto-refresh every 10 seconds, off by default
 
 |cFF00FF00[0.5.2] - 2026-03-11|r
 
 |cFFFFFFFFImprovements|r
-- Heatmap data is now optional — shipped separately via the DeathNotificationLibData addon (auto-downloaded via CurseForge)
+- Heatmap data is now an optional separate download, installed automatically by CurseForge
 
 |cFFFFFFFFBug Fixes|r
-- Fixed minilog Source column not showing predicted sources when source_id is nil
-- Fixed death source search filter only matching NPC names — now also matches environment damage, PvP, and predictions
-- Added tonumber() guards on all source_id usage to handle string-typed values without errors
+- The mini log Source column now shows predicted killers
+- Killer search now also finds environment damage, PvP and predicted killers
 
 |cFF00FF00[0.5.1] - 2026-03-08|r
 
 |cFFFFFFFFNew Features|r
-- All ArtifactUI class backgrounds now selectable as minilog themes (DK Frost, Demon Hunter, Druid, Hunter, Mage Arcane, Monk, Paladin, Priest, Priest Shadow, Rogue, Shadow, Shaman, Warlock, Warrior)
+- Many more class backgrounds to choose as mini log themes
 
 |cFFFFFFFFBug Fixes|r
-- Fixed Death Alert settings panel not appearing in Interface Options
-- Fixed minilog artifact themes rendering the full sprite sheet instead of the background panel region
-- Fixed Deathlog menu background texture using imprecise atlas UV coordinates
+- The Death Alert settings panel now appears in Interface Options
+- Mini log themes and the menu background now display correctly
 
 |cFF00FF00[0.5.0] - 2026-03-06|r
 
 |cFFFFFFFFNew Features|r
-- Resizable & scalable menu — drag the bottom-right corner to resize; position and scale persist between sessions
-- Precomputed purge data, split by expansion
+- Resizable and scalable menu that remembers its position and scale
 - Guild filter for the search log
-- DeathlogData is now a separate addon (auto-installed as a dependency)
-- Instance min-level enforcement — deaths too low-level for a dungeon/raid are filtered out
-- We now have an official Discord! Click the invite link in the changelog status bar to copy it: `discord.gg/TrJFGcah7z`
+- Deaths too low level for a dungeon or raid are filtered out
+- Join our Discord: click the status bar below to copy discord.gg/TrJFGcah7z
 
 |cFFFFFFFFBug Fixes|r
-- Fixed HardcoreDeaths channel pushing General/Trade/LocalDefense to wrong positions
-- Fixed death alert crashes when settings weren't customized
-- Fixed empty graphs with sparse data (division by zero)
-- Fixed "Mouseover for metric details" tooltip positioning
-- Fixed watchlist click-hitbox alignment for Name/Note/Icon columns
-- Fixed watchlist remove behavior so only clicking the visible `X` removes an entry
-- Fixed watchlist icon dropdown to show the currently selected icon
-- Fixed watchlist `Last Checked` staying at "Never" due to refresh flow timing
-- Cleaned up redundant guards in UI code
-- Faster channel join on login
-- Updated NPC data and statistics
-
-|cFFFFFFFFImprovements|r
-- Watchlist refresh cooldown text now updates live each second
+- Deathlog's channel no longer moves General, Trade and LocalDefense out of place
+- Fixed death alert crashes, plus Watch List fixes and a faster channel join
 
 |cFF00FF00[0.4.5] - 2026-02-28|r
-- Fixed major FPS drop when heatmap is enabled (world map and statistics map)
-- New "Heatmap Resolution" setting in options (Low / Medium / High / Ultra)
-- Fixed API compatibility for older clients
+- Fixed a big FPS drop with the heatmap turned on
+- New 'Heatmap Resolution' setting (Low to Ultra)
+- Fixed compatibility with older game clients
 
 |cFF00FF00[0.4.4] - 2026-02-27|r
 
 |cFFFFFFFFNew Features|r
-- In-game changelog popup (you're looking at it!)
-- Death filter for minilog and alerts - show all, guild only, or none
-- GreenWall support - filter by your entire guild confederation
+- In-game changelog (you're looking at it!)
+- Death filter for the mini log and alerts: all, guild only or none
+- GreenWall support: filter by your whole guild confederation
 
 |cFFFFFFFFBug Fixes|r
-- Fixed various crashes and improved stability
+- Fewer crashes and better stability
 
 |cFF888888Use /dl changelog to open this anytime|r
 
 |cFF00FF00[0.4.3] - 2026-02-26|r
-- Fixed multiple "newer version" messages per session
+- The 'newer version' message shows only once per session
 
 |cFF00FF00[0.4.2] - 2026-02-25|r
 - Fixed /played spam in secondary chat tabs
 
 |cFF00FF00[0.4.1] - 2026-02-24|r
-- Fixed watchlist queries
-- Fixed death alert crashes
-- Fixed minilog font and click issues
-- Fixed duplicate death entries
-- New "Auto-hide addon channels" setting
-- Improved watchlist detection
-- "Update Available" indicator on info button
+- New 'Auto-hide addon channels' setting
+- 'Update Available' indicator on the info button
+- Watch List fixes and better detection
+- Fixed death alert crashes and duplicate deaths
+- Fixed mini log font and click issues
 
 |cFF888888For full details, see CHANGELOG.md|r
 ]]

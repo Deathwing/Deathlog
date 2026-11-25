@@ -78,11 +78,14 @@ local function getHcState(unit)
 		if unit ~= "player" then
 			hc_states[unit] = { _name = name, _guid = guid }
 		else
+			-- A new character in this folder keeps the saved Forever region.
+			local region = Deathlog_IS_FOREVER and hc_states[unit]._region or nil
 			for k in pairs(hc_states[unit]) do
 				hc_states[unit][k] = nil
 			end
 			hc_states[unit]._name = name
 			hc_states[unit]._guid = guid
+			hc_states[unit]._region = region
 		end
 	end
 
@@ -202,10 +205,11 @@ local function detectHardcoreTBC()
 	end
 
 	if IsInGuild() then
-		local playerName = UnitName("player") .. "-" .. GetNormalizedRealmName()
+		-- Realm-less Forever has no "Name-Realm" to match, only the GUID.
+		local playerName = not Deathlog_IS_FOREVER and UnitName("player") .. "-" .. GetNormalizedRealmName()
 		for i = 1, GetNumGuildMembers() do
 			local name, _, _, _, _, _, publicNote, _, _, _, _, _, _, _, _, _, guid = GetGuildRosterInfo(i)
-			if guid == playerGUID or name == playerName then
+			if guid == playerGUID or (playerName and name == playerName) then
 				if publicNote and string.match(publicNote, "^%[D%]") then
 					return false
 				end

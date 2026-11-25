@@ -781,15 +781,22 @@ local function showFilteredResults(filter)
 	end
 end
 
+---@param with_mirrors boolean|nil
+---@return table
+local function searchSource(with_mirrors)
+	local data = Deathlog_withPersonalLog(_deathlog_source, with_mirrors)
+	return Deathlog_IS_FOREVER and Deathlog_foreverLogView(data) or data
+end
+
 local function refreshMenuSearchResults(skipPageReset)
-	_deathlog_data = Deathlog_withPersonalLog(_deathlog_source, true)
+	_deathlog_data = searchSource(true)
 	clearDeathlogMenuLogData(skipPageReset)
 	local active_filter = _get_active_filter and _get_active_filter()
 	if active_filter and (_get_filters_active and _get_filters_active()) then
 		showFilteredResults(active_filter)
 	else
 		cancelArchiveSearch()
-		setDeathlogMenuLogData(Deathlog_withPersonalLog(_deathlog_source))
+		setDeathlogMenuLogData(searchSource())
 	end
 end
 
@@ -932,7 +939,7 @@ local function drawLogTab(container)
 
 	--- Server dropdown
 	local function serverLabel(server_name)
-		return server_name == Deathlog_PERSONAL_LOG_KEY and Deathlog_L.personal_log_word or server_name
+		return server_name == Deathlog_PERSONAL_LOG_KEY and Deathlog_L.personal_log_word or Deathlog_realmLabel(server_name)
 	end
 
 	if font_container.server_dd == nil then
@@ -960,15 +967,23 @@ local function drawLogTab(container)
 			end
 		end
 
+		local function offersServer(server_entries)
+			if not Deathlog_IS_FOREVER then return true end
+			for _, entry in pairs(server_entries) do
+				if not Deathlog_predatesForever(entry["date"]) then return true end
+			end
+			return false
+		end
+
 		local entries = { { name = "All", value = "" } }
 		local added_servers = {}
-		local current_realm = GetRealmName()
+		local current_realm = Deathlog_realmKey()
 		if current_realm and current_realm ~= "" then
-			table.insert(entries, { name = current_realm, value = current_realm })
+			table.insert(entries, { name = serverLabel(current_realm), value = current_realm })
 			added_servers[current_realm] = true
 		end
 		for server_name, server_entries in pairs(_deathlog_data) do
-			if not added_servers[server_name] and (server_name ~= Deathlog_PERSONAL_LOG_KEY or next(server_entries)) then
+			if not added_servers[server_name] and (server_name ~= Deathlog_PERSONAL_LOG_KEY or next(server_entries)) and offersServer(server_entries) then
 				table.insert(entries, { name = serverLabel(server_name), value = server_name })
 				added_servers[server_name] = true
 			end

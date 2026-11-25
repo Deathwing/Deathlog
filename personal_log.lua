@@ -100,7 +100,7 @@ end
 ---@return string
 function Deathlog_personalEntryRealm(entry)
 	local extra = entry["extra_data"]
-	return type(extra) == "table" and extra["realm"] or GetRealmName()
+	return type(extra) == "table" and extra["realm"] or Deathlog_realmKey()
 end
 
 --- Reports of the same character, realm, guild and level dated this close are one death.
@@ -177,7 +177,7 @@ function Deathlog_addPersonalEntry(player_data, checksum, key)
 	player_data["date"] = date
 	player_data["extra_data"] = player_data["extra_data"] or {}
 	player_data["extra_data"]["m"] = "n"
-	player_data["extra_data"]["realm"] = GetRealmName()
+	player_data["extra_data"]["realm"] = Deathlog_realmKey()
 	local own_key = (checksum or DeathNotificationLib.Fletcher16(player_data)) .. ":" .. date
 	countPersonal()
 	pending_names = nil
@@ -280,7 +280,7 @@ function Deathlog_noteOwnDeath(player_data)
 	if not (Deathlog_isPersonalLogAvailable() and Deathlog_isPersonalLogEnabled()) then return end
 	-- DNL's dev self-tests fire the hook on a living player.
 	if not UnitIsDeadOrGhost("player") then return end
-	local shared, checksum = Deathlog_findSharedDeath(UnitName("player"), own_death.date, own_death.level)
+	local shared, checksum = Deathlog_findSharedDeath(UnitName("player"), own_death.date, own_death.level, player_data)
 	if shared then
 		own_death.key = Deathlog_addPersonalEntry(copyEntry(shared, "mirror"), checksum)
 	else
@@ -293,7 +293,7 @@ end
 local function markBroadcastDeath(player_data)
 	local level = tonumber(player_data["level"]) or 0
 	local date = tonumber(player_data["date"]) or GetServerTime()
-	local realm = GetRealmName()
+	local realm = Deathlog_realmKey()
 	local best, best_diff
 	for _, entry in pairs(deathlog_personal_data) do
 		local extra = entry["extra_data"]
@@ -312,11 +312,24 @@ local function markBroadcastDeath(player_data)
 	end
 end
 
+--- On Forever the first name is not unique, so a surname both reports carry must match too.
+---@param player_data PlayerData
+---@return boolean
+local function isOwnName(player_data)
+	local name, surname = UnitName("player")
+	if player_data["name"] ~= name then return false end
+	if not Deathlog_IS_FOREVER then return true end
+	local extra = player_data["extra_data"]
+	local sn = type(extra) == "table" and extra["sn"]
+	local both = type(sn) == "string" and sn ~= "" and not Deathlog_isSecret(surname) and type(surname) == "string" and surname ~= ""
+	return not both or sn == surname
+end
+
 ---@return table<string, boolean>
 local function pendingNames()
 	if not pending_names then
 		pending_names = {}
-		local realm = GetRealmName()
+		local realm = Deathlog_realmKey()
 		for _, entry in pairs(deathlog_personal_data) do
 			local extra = entry["extra_data"]
 			if type(extra) == "table" and extra["broadcast"] and not extra["mirror"] and entry["name"] and Deathlog_personalEntryRealm(entry) == realm then
@@ -336,7 +349,7 @@ function Deathlog_mirrorOwnDeath(player_data, checksum, source)
 	local name = player_data["name"]
 	local level = tonumber(player_data["level"]) or 0
 	local date = tonumber(player_data["date"]) or GetServerTime()
-	if own_death and name == UnitName("player") and MIRROR_SOURCES[source] and Deathlog_isPersonalLogAvailable() and Deathlog_isPersonalLogEnabled()
+	if own_death and isOwnName(player_data) and MIRROR_SOURCES[source] and Deathlog_isPersonalLogAvailable() and Deathlog_isPersonalLogEnabled()
 		and math.abs(date - own_death.date) <= DeathNotificationLib.GetDedupWindow(math.max(level, own_death.level))
 	then
 		own_death.key = Deathlog_addPersonalEntry(copyEntry(player_data, "mirror"), checksum, own_death.key)

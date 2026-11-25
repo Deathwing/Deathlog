@@ -207,6 +207,8 @@ local paused = false
 local live_count = nil
 local archived_keys = {}
 local archived_newest = {}
+-- Forever: realm -> checksum -> line set of the deaths archived beside a live death holding their checksum
+local displaced_lines = {}
 local keys_ready = false
 local rollover_queued = false
 local warned_full = false
@@ -279,7 +281,29 @@ local function countNested(t)
 	return n
 end
 
+---@param value true|nil  nil forgets the line
+local function indexDisplaced(realm, checksum, line, value)
+	local by_cs = displaced_lines[realm]
+	if not by_cs then
+		by_cs = {}
+		displaced_lines[realm] = by_cs
+	end
+	local set = by_cs[checksum]
+	if not set then
+		if not value then return end
+		set = {}
+		by_cs[checksum] = set
+	end
+	set[line] = value
+end
+
 local function chunkKeys(realm, chunk, value)
+	if chunk.displaced then
+		for line in chunk.data:gmatch("[^\n]+") do
+			indexDisplaced(realm, unesc(line:match("^[^~]*")), line, value)
+		end
+		return
+	end
 	local keys = archived_keys[realm]
 	if not keys then
 		keys = {}
@@ -348,7 +372,18 @@ local function buildKeys()
 	keys_ready = true
 end
 
-local function appendLines(realm, batch)
+--- The newest chunk with lines of the same kind: rolled over, or displaced (Forever).
+local function lastChunk(r, displaced)
+	for i = #r.chunks, 1, -1 do
+		local c = r.chunks[i]
+		if (c.displaced == true) == displaced then return c end
+	end
+end
+
+--- Displaced lines stay out of the rollover keys and the archived_newest watermark.
+---@param displaced boolean|nil
+local function appendLines(realm, batch, displaced)
+	displaced = displaced == true
 	local a = archiveRoot()
 	local r = a.realms[realm]
 	if not r then
@@ -357,9 +392,9 @@ local function appendLines(realm, batch)
 	end
 	local lines, total, pos = batch.lines, #batch.lines, 1
 	while pos <= total do
-		local c = r.chunks[#r.chunks]
+		local c = lastChunk(r, displaced)
 		if not c or c.n >= CHUNK_SIZE then
-			c = { n = 0, newest = 0, upto = 0 }
+			c = { n = 0, newest = 0, upto = 0, displaced = displaced or nil }
 			r.chunks[#r.chunks + 1] = c
 		end
 		local stop = min(pos + CHUNK_SIZE - c.n - 1, total)
@@ -372,6 +407,12 @@ local function appendLines(realm, batch)
 		a.serial = a.serial + added
 		c.upto = a.serial
 		pos = stop + 1
+	end
+	if displaced then
+		for i = 1, total do
+			indexDisplaced(realm, batch.keys[i], lines[i], true)
+		end
+		return
 	end
 	local keys = archived_keys[realm]
 	if not keys then
@@ -638,7 +679,9 @@ function Deathlog_archiveOnLoad(load_failed)
 			a.realms[realm] = nil
 		else
 			for _, c in ipairs(r.chunks) do
-				archived_newest[realm] = max(tonumber(archived_newest[realm]) or 0, tonumber(c.newest) or 0)
+				if not c.displaced then
+					archived_newest[realm] = max(tonumber(archived_newest[realm]) or 0, tonumber(c.newest) or 0)
+				end
 				chunks = chunks + 1
 			end
 		end
@@ -662,7 +705,7 @@ end
 ---@param days number configured window (-1 = all)
 ---@return number
 function Deathlog_archiveSyncWindow(days)
-	local newest = tonumber(archived_newest[GetRealmName()])
+	local newest = tonumber(archived_newest[Deathlog_realmKey()])
 	if not newest or newest <= 0 then
 		return days
 	end
@@ -693,15 +736,47 @@ function Deathlog_archiveNoteEntry()
 	end
 end
 
---- Only deaths dated within the archived range match, so a new death sharing an old checksum is kept.
+--- No surname, class or race tells them apart and the dates are within the dedup window.
+---@param a table
+---@param b table
+---@return boolean
+local function sameDeath(a, b)
+	if Deathlog_isOtherPlayer(a, b) then return false end
+	local level = max(tonumber(a["level"]) or 0, tonumber(b["level"]) or 0)
+	return math.abs((tonumber(a["date"]) or 0) - (tonumber(b["date"]) or 0)) <= DeathNotificationLib.GetDedupWindow(level)
+end
+
+--- A rolled-over checksum matches only deaths dated within the rolled-over range, so a new death sharing an old checksum is kept; a displaced death matches only itself.
 ---@param realm string
 ---@param checksum string
 ---@param date number|nil
+---@param entry table|nil  the death itself, matched against displaced deaths
 ---@return boolean
-function Deathlog_isArchived(realm, checksum, date)
+function Deathlog_isArchived(realm, checksum, date, entry)
 	local keys = archived_keys[realm]
 	date = tonumber(date)
-	return keys ~= nil and keys[checksum] == true and date ~= nil and date <= (archived_newest[realm] or 0)
+	if keys ~= nil and keys[checksum] == true and date ~= nil and date <= (archived_newest[realm] or 0) then return true end
+	local set = entry and displaced_lines[realm] and displaced_lines[realm][checksum]
+	if set then
+		for line in pairs(set) do
+			local _, record = decode(line)
+			if sameDeath(record, entry) then return true end
+		end
+	end
+	return false
+end
+
+--- Forever: archives one record now, so a different death can hold its checksum in the live log; false when it cannot be archived.
+---@param realm string
+---@param checksum string
+---@param entry table
+---@return boolean
+function Deathlog_archiveRecord(realm, checksum, entry)
+	if paused then return false end
+	local line = encode(checksum, entry)
+	if not line then return false end
+	appendLines(realm, { lines = { line }, keys = { checksum }, newest = tonumber(entry["date"]) or 0 }, true)
+	return true
 end
 
 ---@return number records in deathlog_data plus the archive
@@ -715,10 +790,24 @@ local function newestFirst(a, b)
 	return a.newest > b.newest
 end
 
+---@param v table  split() result
+---@param entry table  reused, cleared first
+---@param extra table  reused, cleared first
+local function decodeInto(v, entry, extra)
+	for k in pairs(entry) do
+		entry[k] = nil
+	end
+	for k in pairs(extra) do
+		extra[k] = nil
+	end
+	decodeParts(v, entry, extra)
+end
+
 local function searchJob(snap, filter)
 	local matches, n = {}, 0
 	local entry, extra = {}, {}
 	local forget = Deathlog_forgetCachedSource
+	local forever = Deathlog_IS_FOREVER
 	local start, tick = debugprofilestop(), 0
 	for _, c in ipairs(snap) do
 		local realm = c.realm
@@ -731,18 +820,20 @@ local function searchJob(snap, filter)
 			local v = split(line)
 			local key = unesc(v[1])
 			local db = deathlog_data[realm]
+			local live = db and db[key]
+			local slot = key
+			-- Forever archives a different death beside the live one holding its checksum; that one is listed too.
+			if forever then
+				decodeInto(v, entry, extra)
+				if live and not sameDeath(live, entry) then live = nil end
+				slot = key .. "#" .. tostring(entry["date"])
+			end
 			-- An interrupted rollover can leave a record both live and archived.
-			if not (db and db[key]) and not found[key] then
-				for k in pairs(entry) do
-					entry[k] = nil
-				end
-				for k in pairs(extra) do
-					extra[k] = nil
-				end
-				decodeParts(v, entry, extra)
+			if not live and not found[slot] then
+				if not forever then decodeInto(v, entry, extra) end
 				if Deathlog_shouldShowEntry(entry) and filter(realm, entry) then
 					local _, e = decode(line)
-					found[key] = e
+					found[slot] = e
 					n = n + 1
 					if n >= SEARCH_LIMIT then
 						return matches, n
@@ -788,9 +879,9 @@ function Deathlog_archiveSearch(filter, on_done, realm)
 	-- Strings are immutable, so jobs that edit the chunk lists cannot disturb the scan.
 	local snap = {}
 	for r, rec in pairs(archiveRoot().realms) do
-		if not realm or r == realm then
+		if (not realm or r == realm) and not (Deathlog_IS_FOREVER and not Deathlog_foreverKeyOf(r, "")) then
 			for _, c in ipairs(rec.chunks) do
-				if type(c.data) == "string" then
+				if type(c.data) == "string" and not Deathlog_predatesForever(c.newest) then
 					snap[#snap + 1] = { realm = r, data = c.data, newest = tonumber(c.newest) or 0 }
 				end
 			end
